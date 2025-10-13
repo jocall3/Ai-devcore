@@ -1,5 +1,5 @@
 import React from 'react';
-import { ALL_FEATURES } from '../features/index.ts';
+import { ALL_FEATURES } from '../features/index.tsx';
 import type { Feature } from '../../types.ts';
 
 interface FeatureButtonProps {

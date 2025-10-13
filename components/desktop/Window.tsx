@@ -1,6 +1,6 @@
 import React, { Suspense, useRef, useState } from 'react';
 import type { Feature } from '../../types.ts';
-import { FEATURES_MAP } from '../features/index.ts';
+import { FEATURES_MAP } from '../features/index.tsx';
 import { LoadingIndicator } from '../../App.tsx';
 import { MinimizeIcon, XMarkIcon } from '../icons.tsx';
 

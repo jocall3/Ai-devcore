@@ -3,7 +3,7 @@ import { useGlobalState } from '../contexts/GlobalStateContext.tsx';
 import { clearAllFiles } from '../services/dbService.ts';
 import { useLocalStorage } from '../hooks/useLocalStorage.ts';
 import { useTheme } from '../hooks/useTheme.ts';
-import { ALL_FEATURES } from './features/index.ts';
+import { ALL_FEATURES } from './features/index.tsx';
 import { TrashIcon, SunIcon, MoonIcon } from './icons.tsx';
 
 const ToggleSwitch: React.FC<{ checked: boolean, onChange: () => void }> = ({ checked, onChange }) => {

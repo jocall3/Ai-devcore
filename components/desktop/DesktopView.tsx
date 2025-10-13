@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { FeatureDock } from './FeatureDock.tsx';
 import { Window } from './Window.tsx';
 import { Taskbar } from './Taskbar.tsx';
-import { ALL_FEATURES } from '../features/index.ts';
+import { ALL_FEATURES } from '../features/index.tsx';
 import type { Feature } from '../../types.ts';
 
 interface WindowState {
@@ -25,7 +25,7 @@ export const DesktopView: React.FC<{ openFeatureId?: string }> = ({ openFeatureI
         setNextZIndex(newZIndex);
         setActiveId(featureId);
 
-        setWindows(prev => {
+        setWindows((prev) => {
             const existingWindow = prev[featureId];
             if (existingWindow) {
                 return {
@@ -38,7 +38,8 @@ export const DesktopView: React.FC<{ openFeatureId?: string }> = ({ openFeatureI
                 };
             }
 
-            const openWindowsCount = Object.values(prev).filter(w => !w.isMinimized).length;
+            // Fix: Add type annotation to `w` because the compiler was incorrectly inferring it as `unknown`.
+            const openWindowsCount = Object.values(prev).filter((w: WindowState) => !w.isMinimized).length;
             const newWindow: WindowState = {
                 id: featureId,
                 position: { x: 50 + openWindowsCount * 30, y: 50 + openWindowsCount * 30 },
@@ -90,8 +91,9 @@ export const DesktopView: React.FC<{ openFeatureId?: string }> = ({ openFeatureI
         }));
     }
 
-    const openWindows = Object.values(windows).filter(w => !w.isMinimized);
-    const minimizedWindows = Object.values(windows).filter(w => w.isMinimized);
+    const windowIds = Object.keys(windows);
+    const openWindows = windowIds.map(id => windows[id]).filter(w => !w.isMinimized);
+    const minimizedWindows = windowIds.map(id => windows[id]).filter(w => w.isMinimized);
     const featuresMap = new Map(ALL_FEATURES.map(f => [f.id, f]));
 
     return (
@@ -116,7 +118,7 @@ export const DesktopView: React.FC<{ openFeatureId?: string }> = ({ openFeatureI
                 })}
             </div>
             <Taskbar
-                minimizedWindows={minimizedWindows.map(w => featuresMap.get(w.id)).filter(Boolean) as Feature[]}
+                minimizedWindows={minimizedWindows.map(w => featuresMap.get(w.id)).filter((f): f is Feature => !!f)}
                 onRestore={openWindow}
             />
         </div>

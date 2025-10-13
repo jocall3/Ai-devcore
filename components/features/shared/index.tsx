@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { marked } from 'marked';
 
@@ -14,7 +15,7 @@ interface MarkdownRendererProps {
 }
 
 export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) => {
-    const [sanitizedHtml, setSanitizedHtml] = useState<string | TrustedHTML>('');
+    const [sanitizedHtml, setSanitizedHtml] = useState<string>('');
 
     useEffect(() => {
         const parse = async () => {

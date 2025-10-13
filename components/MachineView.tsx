@@ -1,11 +1,7 @@
-
-
-
-
 import React, { useState, useCallback } from 'react';
 import type { Feature } from '../types.ts';
 import { SLOTS, type SlotCategory } from '../constants.tsx';
-import { FEATURES_MAP } from './features/index.ts';
+import { FEATURES_MAP } from './features/index.tsx';
 
 interface InstalledFeatures {
     [key: string]: Feature | null;

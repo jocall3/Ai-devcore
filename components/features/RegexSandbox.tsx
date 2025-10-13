@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { generateRegExStream } from '../../services/aiService.ts';
 import { BeakerIcon } from '../icons.tsx';
@@ -62,7 +63,7 @@ export const RegexSandbox: React.FC<{ initialPrompt?: string }> = ({ initialProm
     const highlightedString = useMemo(() => {
         if (!matches || matches.length === 0 || error) return testString;
         let lastIndex = 0;
-        const parts: (string | JSX.Element)[] = [];
+        const parts: React.ReactNode[] = [];
         matches.forEach((match, i) => {
             if (match.index === undefined) return;
             parts.push(testString.substring(lastIndex, match.index));

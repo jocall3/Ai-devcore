@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useCallback } from 'react';
-import { ALL_FEATURES } from './index.ts';
+import { ALL_FEATURES } from './index.tsx';
 import { FEATURE_TAXONOMY } from '../../services/taxonomyService.ts';
 import { generatePipelineCode } from '../../services/aiService.ts';
 import type { Feature } from '../../types.ts';
@@ -240,7 +240,6 @@ export const LogicFlowBuilder: React.FC = () => {
                             {isGenerating && !generatedCode ? <div className="flex justify-center items-center h-full"><LoadingSpinner /></div> : <MarkdownRenderer content={'```javascript\n' + generatedCode + '\n```'} />}
                         </div>
                     </div>
-                </div>
             )}
         </div>
     );

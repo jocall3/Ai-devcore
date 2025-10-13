@@ -16,19 +16,22 @@ interface State {
 }
 
 export class ErrorBoundary extends React.Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false, error: null, aiHelp: '', isAiLoading: false };
-  }
+  state: State = {
+    hasError: false,
+    error: null,
+    aiHelp: '',
+    isAiLoading: false,
+  };
 
   static getDerivedStateFromError(error: Error): Partial<State> {
+    // Update state so the next render will show the fallback UI.
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     logError(error, { componentStack: errorInfo.componentStack });
   }
-  
+
   handleRevert = () => {
     window.location.reload();
   };
@@ -50,7 +53,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
     } finally {
         this.setState({ isAiLoading: false });
     }
-};
+  };
 
   render() {
     if (this.state.hasError) {
@@ -60,12 +63,12 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 <div className="flex flex-col">
                     <h1 className="text-2xl font-bold text-red-600 mb-2">An Unexpected Error Occurred</h1>
                     <p className="text-text-secondary mb-4">A component has crashed. You can try reloading or ask the AI for debugging help.</p>
-                    
+
                     <details className="text-left bg-gray-50 dark:bg-slate-900 p-2 rounded-md max-w-xl text-xs font-mono mb-4 flex-grow overflow-auto border border-border">
                         <summary className="cursor-pointer">Error Details</summary>
                         <pre className="mt-2 whitespace-pre-wrap">{this.state.error?.stack}</pre>
                     </details>
-                    
+
                     <div className="flex gap-4 mt-auto">
                         <button
                             onClick={this.handleRevert}

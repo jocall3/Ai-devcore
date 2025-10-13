@@ -1,12 +1,9 @@
-
-
-import React, { Suspense, useCallback, useMemo, useState, useEffect } from 'react';
+import React, { Suspense, useMemo, useState, useEffect, useCallback } from 'react';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import { useGlobalState } from './contexts/GlobalStateContext.tsx';
 import { logEvent } from './services/telemetryService.ts';
-import { ALL_FEATURES, FEATURES_MAP } from './components/features/index.ts';
-import type { ViewType, SidebarItem, AppUser } from './types.ts';
-import { ActionManager } from './components/ActionManager.tsx';
+import { ALL_FEATURES, FEATURES_MAP } from './components/features/index.tsx';
+import { ViewType, SidebarItem, AppUser } from './types.ts';
 import { LeftSidebar } from './components/LeftSidebar.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
 import { CommandPalette } from './components/CommandPalette.tsx';
@@ -17,6 +14,7 @@ import { NotificationProvider } from './contexts/NotificationContext.tsx';
 import { useTheme } from './hooks/useTheme.ts';
 import { VaultProvider } from './components/vault/VaultProvider.tsx';
 import { initGoogleAuth } from './services/googleAuthService.ts';
+import { ActionManager } from './components/ActionManager.tsx';
 
 
 export const LoadingIndicator: React.FC = () => (
@@ -113,7 +111,7 @@ const AppContent: React.FC = () => {
         <div className="relative flex h-full w-full">
             <LeftSidebar items={sidebarItems} activeView={state.activeView} onNavigate={handleViewChange} />
             <div className="flex-1 flex min-w-0">
-                <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex-1 flex flex-col min-w-0 relative">
                     <main className="relative flex-1 min-w-0 bg-surface/50 dark:bg-slate-900/50 overflow-y-auto">
                         <ErrorBoundary>
                             <Suspense fallback={<LoadingIndicator />}>
@@ -122,9 +120,9 @@ const AppContent: React.FC = () => {
                                 </div>
                             </Suspense>
                         </ErrorBoundary>
-                        <ActionManager />
                     </main>
                     <StatusBar bgImageStatus="loaded" />
+                    <ActionManager />
                 </div>
             </div>
             <CommandPalette isOpen={isCommandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} onSelect={handleViewChange} />

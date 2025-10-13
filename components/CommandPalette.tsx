@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { ALL_FEATURES } from './features/index.ts';
+import { ALL_FEATURES } from './features/index.tsx';
 import type { ViewType } from '../types.ts';
 
 interface CommandPaletteProps {

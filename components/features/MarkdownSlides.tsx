@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { marked } from 'marked';
 import { PhotoIcon } from '../icons.tsx';
@@ -31,7 +30,7 @@ Easy to create and present.
 export const MarkdownSlides: React.FC = () => {
     const [markdown, setMarkdown] = useState(exampleMarkdown);
     const [currentSlide, setCurrentSlide] = useState(0);
-    const [slideHtml, setSlideHtml] = useState<string | TrustedHTML>('');
+    const [slideHtml, setSlideHtml] = useState<string>('');
     const presentationRef = useRef<HTMLDivElement>(null);
 
     const slides = useMemo(() => markdown.split(/^-{3,}\s*$/m), [markdown]);
