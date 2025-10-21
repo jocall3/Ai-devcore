@@ -228,18 +228,30 @@ export const LogicFlowBuilder: React.FC = () => {
                         return feature ? <NodeComponent key={node.id} node={node} feature={feature} onMouseDown={handleNodeMouseDown} onLinkStart={handleLinkStart} onLinkEnd={handleLinkEnd} /> : null;
                     })}
                 </main>
-            </div>
+                        </div>
+
             {(isGenerating || generatedCode) && (
-                <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 flex items-center justify-center" onClick={() => setGeneratedCode('')}>
-                    <div className="w-full max-w-3xl h-3/4 bg-surface border border-border rounded-lg shadow-2xl p-6 flex flex-col" onClick={e => e.stopPropagation()}>
+                <div
+                    className="fixed inset-0 bg-gray-900/80 backdrop-blur-sm z-50 flex items-center justify-center"
+                    onClick={() => setGeneratedCode('')}
+                >
+                    <div
+                        className="w-full max-w-3xl h-3/4 bg-surface border border-border rounded-lg shadow-2xl p-6 flex flex-col"
+                        onClick={e => e.stopPropagation()}
+                    >
                         <div className="flex justify-between items-center mb-4">
                             <h2 className="text-xl font-bold">Generated Pipeline Code</h2>
                             <button onClick={() => setGeneratedCode('')}><XMarkIcon/></button>
                         </div>
+
                         <div className="flex-grow bg-background border border-border rounded-md overflow-auto">
-                            {isGenerating && !generatedCode ? <div className="flex justify-center items-center h-full"><LoadingSpinner /></div> : <MarkdownRenderer content={'```javascript\n' + generatedCode + '\n```'} />}
+                            {isGenerating && !generatedCode
+                                ? <div className="flex justify-center items-center h-full"><LoadingSpinner /></div>
+                                : <MarkdownRenderer content={'```javascript\n' + generatedCode + '\n```'} />
+                            }
                         </div>
                     </div>
+                </div> 
             )}
         </div>
     );
