@@ -1,9 +1,9 @@
 import React, { Suspense, useMemo, useState, useEffect, useCallback } from 'react';
-import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useGlobalState } from './contexts/GlobalStateContext.tsx';
-import { logEvent } from './services/telemetryService.ts';
+import { logEvent } from './services/telemetryService';
 import { ALL_FEATURES, FEATURES_MAP } from './components/features/index.tsx';
-import { ViewType, SidebarItem, AppUser } from './types.ts';
+import { ViewType, SidebarItem, AppUser } from './types';
 import { LeftSidebar } from './components/LeftSidebar.tsx';
 import { StatusBar } from './components/StatusBar.tsx';
 import { CommandPalette } from './components/CommandPalette.tsx';
@@ -11,9 +11,9 @@ import { SettingsView } from './components/SettingsView.tsx';
 import { Cog6ToothIcon, HomeIcon, FolderIcon, RectangleGroupIcon } from './components/icons.tsx';
 import { AiCommandCenter } from './components/features/AiCommandCenter.tsx';
 import { NotificationProvider } from './contexts/NotificationContext.tsx';
-import { useTheme } from './hooks/useTheme.ts';
+import { useTheme } from './hooks/useTheme';
 import { VaultProvider } from './components/vault/VaultProvider.tsx';
-import { initGoogleAuth } from './services/googleAuthService.ts';
+import { initGoogleAuth } from './services/googleAuthService';
 import { ActionManager } from './components/ActionManager.tsx';
 
 

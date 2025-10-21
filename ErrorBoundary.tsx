@@ -39,18 +39,22 @@ export class ErrorBoundary extends React.Component<Props, State> {
   handleAskAi = async () => {
     if (!this.state.error) return;
 
+    // FIX: Add `this` keyword to `setState`
     this.setState({ isAiLoading: true, aiHelp: '' });
     try {
         const stream = debugErrorStream(this.state.error);
         let fullResponse = '';
         for await (const chunk of stream) {
             fullResponse += chunk;
+            // FIX: Add `this` keyword to `setState`
             this.setState({ aiHelp: fullResponse });
         }
     } catch (e) {
+        // FIX: Add `this` keyword to `setState`
         this.setState({ aiHelp: 'Sorry, the AI assistant could not be reached.' });
         logError(e as Error, { context: 'AI Error Debugging' });
     } finally {
+        // FIX: Add `this` keyword to `setState`
         this.setState({ isAiLoading: false });
     }
   };
@@ -100,6 +104,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
+    // FIX: Add `this` keyword to `props`
     return this.props.children;
   }
 }
