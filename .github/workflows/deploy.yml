@@ -34,7 +34,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./dist   # <— this is what GH Pages will publish
+          path: ./web   # <— this is what GH Pages will publish
 
   deploy:
     environment:
