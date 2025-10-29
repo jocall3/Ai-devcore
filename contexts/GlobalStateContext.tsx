@@ -1,22 +1,45 @@
+/**
+ * @file Manages the global state of the application using React's Context and useReducer hook.
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { createContext, useReducer, useContext, useEffect } from 'react';
 import type { ViewType, AppUser, GitHubUser, FileNode } from '../types.ts';
+import { isVaultInitialized, lockVault } from '../services/vaultService.ts';
 
-// State shape
+/**
+ * Defines the shape of the global application state.
+ * @interface GlobalState
+ */
 interface GlobalState {
+  /** The currently active view or feature component being displayed. */
   activeView: ViewType;
+  /** Props passed to the active view component. */
   viewProps: any;
+  /** A list of feature IDs that are hidden from the UI. */
   hiddenFeatures: string[];
+  /** The currently authenticated application user. Null if not signed in. */
   user: AppUser | null;
+  /** The authenticated GitHub user profile. Null if not connected. */
   githubUser: GitHubUser | null;
+  /** The file tree structure of the currently selected repository. */
   projectFiles: FileNode | null;
+  /** The currently selected GitHub repository. */
   selectedRepo: { owner: string; repo: string } | null;
+  /** The state of the local credential vault. */
   vaultState: {
+    /** Whether the vault has been set up with a master password. */
     isInitialized: boolean;
+    /** Whether the vault is currently unlocked for the session. */
     isUnlocked: boolean;
   };
 }
 
-// Action types
+/**
+ * Defines the actions that can be dispatched to update the global state.
+ * @type Action
+ */
 type Action =
   | { type: 'SET_VIEW'; payload: { view: ViewType, props?: any } }
   | { type: 'TOGGLE_FEATURE_VISIBILITY'; payload: { featureId: string } }
@@ -26,7 +49,10 @@ type Action =
   | { type: 'SET_SELECTED_REPO'; payload: { owner: string; repo: string } | null }
   | { type: 'SET_VAULT_STATE'; payload: Partial<{ isInitialized: boolean, isUnlocked: boolean }> };
 
-
+/**
+ * The initial state of the application.
+ * @const
+ */
 const initialState: GlobalState = {
   activeView: 'ai-command-center',
   viewProps: {},
@@ -41,6 +67,13 @@ const initialState: GlobalState = {
   },
 };
 
+/**
+ * The reducer function to handle state updates.
+ * It takes the current state and an action, and returns the new state.
+ * @param state - The current global state.
+ * @param action - The action to perform.
+ * @returns The new global state.
+ */
 const reducer = (state: GlobalState, action: Action): GlobalState => {
   switch (action.type) {
     case 'SET_VIEW':
@@ -61,7 +94,7 @@ const reducer = (state: GlobalState, action: Action): GlobalState => {
                 githubUser: null,
                 selectedRepo: null,
                 projectFiles: null,
-            }
+            };
         }
         return { ...state, user: action.payload };
     case 'SET_GITHUB_USER':
@@ -71,7 +104,7 @@ const reducer = (state: GlobalState, action: Action): GlobalState => {
              // Reset repo-specific data if disconnected
             selectedRepo: action.payload ? state.selectedRepo : null,
             projectFiles: action.payload ? state.projectFiles : null,
-        }
+        };
     case 'LOAD_PROJECT_FILES':
       return { ...state, projectFiles: action.payload };
     case 'SET_SELECTED_REPO':
@@ -86,17 +119,31 @@ const reducer = (state: GlobalState, action: Action): GlobalState => {
   }
 };
 
+/**
+ * The React context for accessing the global state and dispatch function.
+ */
 const GlobalStateContext = createContext<{
   state: GlobalState;
   dispatch: React.Dispatch<Action>;
-}>({
+}>({ 
   state: initialState,
   dispatch: () => null,
 });
 
 const LOCAL_STORAGE_KEY = 'devcore_snapshot';
 const CONSENT_KEY = 'devcore_ls_consent';
+const VAULT_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
+/**
+ * The provider component that makes the global state available to its children.
+ * It also handles state persistence to localStorage and vault session management.
+ * @param {object} props - The component props.
+ * @param {React.ReactNode} props.children - The child components.
+ * @example
+ * <GlobalStateProvider>
+ *   <App />
+ * </GlobalStateProvider>
+ */
 export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const canPersist = (() => {
         try {
@@ -129,6 +176,52 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }
     });
 
+    // Effect to check vault initialization status on app startup.
+    useEffect(() => {
+        const checkVaultStatus = async () => {
+            const initialized = await isVaultInitialized();
+            dispatch({ type: 'SET_VAULT_STATE', payload: { isInitialized: initialized } });
+        };
+        checkVaultStatus();
+    }, []);
+
+    // Effect to manage vault session timeout for automatic locking.
+    useEffect(() => {
+        let timeoutId: number | undefined;
+
+        const resetTimeout = () => {
+            if (timeoutId) clearTimeout(timeoutId);
+            if (state.vaultState.isUnlocked) {
+                timeoutId = window.setTimeout(() => {
+                    console.log('Vault session timed out due to inactivity. Locking vault.');
+                    lockVault();
+                    dispatch({ type: 'SET_VAULT_STATE', payload: { isUnlocked: false } });
+                }, VAULT_TIMEOUT_MS);
+            }
+        };
+
+        const activityEvents: (keyof WindowEventMap)[] = ['mousemove', 'keydown', 'mousedown', 'touchstart'];
+
+        if (state.vaultState.isUnlocked) {
+            resetTimeout();
+            activityEvents.forEach(event => window.addEventListener(event, resetTimeout));
+        }
+
+        return () => {
+            if (timeoutId) clearTimeout(timeoutId);
+            activityEvents.forEach(event => window.removeEventListener(event, resetTimeout));
+        };
+    }, [state.vaultState.isUnlocked]);
+
+    // Effect to automatically lock the vault on user logout.
+    useEffect(() => {
+        if (state.user === null && state.vaultState.isUnlocked) {
+            lockVault();
+            dispatch({ type: 'SET_VAULT_STATE', payload: { isUnlocked: false } });
+        }
+    }, [state.user, state.vaultState.isUnlocked]);
+
+    // Effect to persist parts of the state to localStorage.
     useEffect(() => {
         if (!canPersist) return;
 
@@ -157,4 +250,10 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
     );
 };
 
+/**
+ * Custom hook for accessing the global state and dispatch function.
+ * @returns An object containing the current state and the dispatch function.
+ * @example
+ * const { state, dispatch } = useGlobalState();
+ */
 export const useGlobalState = () => useContext(GlobalStateContext);
