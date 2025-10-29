@@ -7,17 +7,57 @@ import React, { useState } from 'react';
 import * as vaultService from '../../services/vaultService.ts';
 import { LoadingSpinner } from '../shared/LoadingSpinner.tsx';
 
+/**
+ * @interface Props
+ * @description Props for the CreateMasterPasswordModal component.
+ */
 interface Props {
+    /**
+     * @property {() => void} onSuccess - Callback function to execute when the vault is successfully created.
+     * @example
+     * // Called after the user creates a password.
+     * const handleSuccess = () => console.log('Vault created!');
+     */
     onSuccess: () => void;
+    /**
+     * @property {() => void} onCancel - Callback function to execute when the user cancels the creation process.
+     * @example
+     * // Called when the user clicks the 'Cancel' button.
+     * const handleCancel = () => console.log('Creation cancelled.');
+     */
     onCancel: () => void;
 }
 
+/**
+ * A modal component for creating a new master password and initializing the application's credential vault.
+ *
+ * @component
+ * @param {Props} props - The component props.
+ * @returns {React.ReactElement} The rendered modal component.
+ *
+ * @example
+ * return (
+ *   <CreateMasterPasswordModal
+ *     onSuccess={() => setModalOpen(false)}
+ *     onCancel={() => setModalOpen(false)}
+ *   />
+ * );
+ */
 export const CreateMasterPasswordModal: React.FC<Props> = ({ onSuccess, onCancel }) => {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
+    /**
+     * Handles the form submission for creating the master password.
+     * It validates the password fields and calls the vault service to initialize the vault.
+     * @param {React.FormEvent} e - The form submission event.
+     * @returns {Promise<void>} A promise that resolves when the submission is handled.
+     * @example
+     * // This function is called when the form is submitted.
+     * <form onSubmit={handleSubmit}>...</form>
+     */
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
