@@ -1,38 +1,110 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { generateCodingChallengeStream } from '../services/index.ts';
+import { useVaultModal } from '../contexts/VaultModalContext.tsx';
+import { useNotification } from '../contexts/NotificationContext.tsx';
+import { useGlobalState } from '../contexts/GlobalStateContext.tsx';
 import { BeakerIcon } from './icons.tsx';
 import { LoadingSpinner } from './shared/index.tsx';
 import { MarkdownRenderer } from './shared/index.tsx';
 
+/**
+ * @component AiCodingChallenge
+ * @description A feature component that generates unique coding challenges using an AI model.
+ * It provides a new problem on-demand to help users practice their coding skills.
+ * The component handles streaming the AI's response and gracefully manages the vault state,
+ * prompting for unlock if necessary to access the AI service.
+ *
+ * @example
+ * return (
+ *   <div style={{ height: '600px', width: '800px' }}>
+ *     <AiCodingChallenge />
+ *   </div>
+ * )
+ */
 export const AiCodingChallenge: React.FC = () => {
+    /**
+     * @state
+     * @description The markdown content of the generated coding challenge.
+     * @type {string}
+     */
     const [challenge, setChallenge] = useState<string>('');
-    const [isLoading, setIsLoading] = useState<boolean>(false);
-    const [error, setError] = useState<string>('');
 
+    /**
+     * @state
+     * @description A boolean flag to indicate if a challenge is currently being generated.
+     * @type {boolean}
+     */
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+
+    /**
+     * @state
+     * @description Stores any error message that occurs during challenge generation.
+     * @type {string}
+     */
+    const [error, setError] = useState<string>('');
+    
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
+    /**
+     * @function withVault
+     * @description A wrapper function that ensures the vault is initialized and unlocked before executing a callback.
+     * It triggers UI modals for vault creation or unlocking if the vault is not ready.
+     * @param {() => Promise<void>} callback - The async function to execute once the vault is ready.
+     * @returns {Promise<void>}
+     */
+    const withVault = useCallback(async (callback: () => Promise<void>) => {
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (!created) {
+                const msg = 'Vault setup is required to use AI features.';
+                addNotification(msg, 'error');
+                setError(msg);
+                return;
+            }
+        }
+        if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (!unlocked) {
+                const msg = 'Vault must be unlocked to use AI features.';
+                addNotification(msg, 'error');
+                setError(msg);
+                return;
+            }
+        }
+        await callback();
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
+
+    /**
+     * @function handleGenerate
+     * @description Requests a new coding challenge from the AI service. It ensures the vault is unlocked
+     * before making the request. It handles loading states, streaming the response, and managing errors.
+     * @returns {Promise<void>} A promise that resolves when the generation is complete or has failed.
+     */
     const handleGenerate = useCallback(async () => {
         setIsLoading(true);
         setError('');
         setChallenge('');
-        try {
-            const stream = generateCodingChallengeStream(null);
-            let fullResponse = '';
-            for await (const chunk of stream) {
-                fullResponse += chunk;
-                setChallenge(fullResponse);
+        
+        await withVault(async () => {
+            try {
+                const stream = generateCodingChallengeStream(null);
+                let fullResponse = '';
+                for await (const chunk of stream) {
+                    fullResponse += chunk;
+                    setChallenge(fullResponse);
+                }
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+                setError(`Failed to generate challenge: ${errorMessage}`);
+                addNotification(`Error: ${errorMessage}`, 'error');
             }
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            setError(`Failed to generate challenge: ${errorMessage}`);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        // Generate a challenge on initial load for a better user experience
-        handleGenerate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+        });
+        
+        setIsLoading(false);
+    }, [withVault, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
@@ -47,7 +119,7 @@ export const AiCodingChallenge: React.FC = () => {
                 <button
                     onClick={handleGenerate}
                     disabled={isLoading}
-                    className="btn-primary flex items-center justify-center px-6 py-3"
+                    className="btn-primary flex items-center justify-center px-6 py-3 min-w-[220px]"
                 >
                     {isLoading ? <LoadingSpinner /> : 'Generate New Challenge'}
                 </button>
