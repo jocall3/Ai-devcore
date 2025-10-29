@@ -29,7 +29,7 @@
     "xstate": "6.2.1"
   },
   "devDependencies": {
-    "@storybook/addon-essentials": "10.0.1",
+    "@storybook/addon-essentials": "8.6.14",
     "@storybook/addon-interactions": "10.0.1",
     "@storybook/addon-links": "10.0.1",
     "@storybook/blocks": "10.0.1",
