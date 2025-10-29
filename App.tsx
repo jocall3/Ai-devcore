@@ -15,6 +15,8 @@ import { useTheme } from './hooks/useTheme';
 import { VaultProvider } from './components/vault/VaultProvider.tsx';
 import { initGoogleAuth } from './services/googleAuthService';
 import { ActionManager } from './components/ActionManager.tsx';
+import { useVaultModal } from './contexts/VaultModalContext.tsx';
+import { isVaultInitialized } from './services/vaultService.ts';
 
 
 export const LoadingIndicator: React.FC = () => (
@@ -66,6 +68,19 @@ const AppContent: React.FC = () => {
     const { state, dispatch } = useGlobalState();
     const { activeView, viewProps, hiddenFeatures } = state;
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
+    const { requestUnlock } = useVaultModal();
+
+    useEffect(() => {
+        const checkVaultStatus = async () => {
+            const initialized = await isVaultInitialized();
+            dispatch({ type: 'SET_VAULT_STATE', payload: { isInitialized: initialized } });
+            if (initialized) {
+                // If vault exists, automatically prompt for unlock on startup.
+                await requestUnlock();
+            }
+        };
+        checkVaultStatus();
+    }, [dispatch, requestUnlock]);
   
     useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
