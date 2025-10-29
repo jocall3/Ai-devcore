@@ -1,7 +1,20 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+*/
+
 import type { Octokit } from 'octokit';
 import type { Repo, FileNode } from '../types.ts';
 import { logEvent, logError, measurePerformance } from './telemetryService.ts';
 
+/**
+ * Fetches the repositories for the authenticated user.
+ * @param {Octokit} octokit - An authenticated Octokit instance.
+ * @returns {Promise<Repo[]>} A promise that resolves to an array of repositories.
+ * @example
+ * const octokit = initializeOctokit(token);
+ * const repos = await getRepos(octokit);
+ */
 export const getRepos = async (octokit: Octokit): Promise<Repo[]> => {
     return measurePerformance('getRepos', async () => {
         logEvent('getRepos_start');
@@ -16,6 +29,15 @@ export const getRepos = async (octokit: Octokit): Promise<Repo[]> => {
     });
 };
 
+/**
+ * Deletes a repository for the authenticated user.
+ * @param {Octokit} octokit - An authenticated Octokit instance.
+ * @param {string} owner - The owner of the repository.
+ * @param {string} repo - The name of the repository.
+ * @returns {Promise<void>} A promise that resolves when the repository is deleted.
+ * @example
+ * await deleteRepo(octokit, 'my-org', 'my-repo');
+ */
 export const deleteRepo = async (octokit: Octokit, owner: string, repo: string): Promise<void> => {
      return measurePerformance('deleteRepo', async () => {
         logEvent('deleteRepo_start', { owner, repo });
@@ -29,6 +51,15 @@ export const deleteRepo = async (octokit: Octokit, owner: string, repo: string):
     });
 };
 
+/**
+ * Fetches the entire file tree for a given repository's default branch.
+ * @param {Octokit} octokit - An authenticated Octokit instance.
+ * @param {string} owner - The owner of the repository.
+ * @param {string} repo - The name of the repository.
+ * @returns {Promise<FileNode>} A promise that resolves to the root FileNode of the repository tree.
+ * @example
+ * const fileTree = await getRepoTree(octokit, 'my-org', 'my-repo');
+ */
 export const getRepoTree = async (octokit: Octokit, owner: string, repo: string): Promise<FileNode> => {
      return measurePerformance('getRepoTree', async () => {
         logEvent('getRepoTree_start', { owner, repo });
@@ -38,6 +69,7 @@ export const getRepoTree = async (octokit: Octokit, owner: string, repo: string)
             const { data: branch } = await octokit.request('GET /repos/{owner}/{repo}/branches/{branch}', { owner, repo, branch: defaultBranch });
             const treeSha = branch.commit.commit.tree.sha;
             const { data: treeData } = await octokit.request('GET /repos/{owner}/{repo}/git/trees/{tree_sha}', { owner, repo, tree_sha: treeSha, recursive: 'true' });
+            
             const root: FileNode = { name: repo, type: 'folder', path: '', children: [] };
             treeData.tree.forEach((item: any) => {
                 if (!item.path) return;
@@ -48,13 +80,15 @@ export const getRepoTree = async (octokit: Octokit, owner: string, repo: string)
                     let childNode = currentNode.children.find(child => child.name === part);
                     if (!childNode) {
                         const isLastPart = index === pathParts.length - 1;
-                        childNode = { name: part, path: item.path, type: isLastPart ? (item.type === 'tree' ? 'folder' : 'file') : 'folder' };
-                         if (childNode.type === 'folder') { childNode.children = []; }
+                        const type = isLastPart ? (item.type === 'tree' ? 'folder' : 'file') : 'folder';
+                        childNode = { name: part, path: item.path, type };
+                         if (type === 'folder') { childNode.children = []; }
                         currentNode.children.push(childNode);
                     }
                     currentNode = childNode;
                 });
             });
+
             logEvent('getRepoTree_success', { owner, repo, items: treeData.tree.length });
             return root;
         } catch (error) {
@@ -64,12 +98,24 @@ export const getRepoTree = async (octokit: Octokit, owner: string, repo: string)
     });
 };
 
+/**
+ * Fetches the content of a specific file from a repository.
+ * @param {Octokit} octokit - An authenticated Octokit instance.
+ * @param {string} owner - The owner of the repository.
+ * @param {string} repo - The name of the repository.
+ * @param {string} path - The path to the file within the repository.
+ * @returns {Promise<string>} A promise that resolves to the decoded file content as a string.
+ * @example
+ * const content = await getFileContent(octokit, 'my-org', 'my-repo', 'src/index.js');
+ */
 export const getFileContent = async (octokit: Octokit, owner: string, repo: string, path: string): Promise<string> => {
     return measurePerformance('getFileContent', async () => {
         logEvent('getFileContent_start', { owner, repo, path });
         try {
             const { data } = await octokit.request('GET /repos/{owner}/{repo}/contents/{path}', { owner, repo, path });
-            if (Array.isArray(data) || data.type !== 'file' || typeof data.content !== 'string') { throw new Error("Path did not point to a valid file or content was missing."); }
+            if (Array.isArray(data) || data.type !== 'file' || typeof data.content !== 'string') { 
+                throw new Error("The specified path is a directory or an invalid file.");
+            }
             const content = atob(data.content);
             logEvent('getFileContent_success', { owner, repo, path, size: content.length });
             return content;
@@ -80,6 +126,18 @@ export const getFileContent = async (octokit: Octokit, owner: string, repo: stri
     });
 };
 
+/**
+ * Commits one or more files to a repository branch.
+ * @param {Octokit} octokit - An authenticated Octokit instance.
+ * @param {string} owner - The owner of the repository.
+ * @param {string} repo - The name of the repository.
+ * @param {{path: string, content: string}[]} files - An array of file objects to commit.
+ * @param {string} message - The commit message.
+ * @param {string} [branch='main'] - The branch to commit to.
+ * @returns {Promise<string>} A promise that resolves to the URL of the new commit.
+ * @example
+ * const commitUrl = await commitFiles(octokit, 'my-org', 'my-repo', [{ path: 'README.md', content: '# New Readme' }], 'Update README');
+ */
 export const commitFiles = async (
     octokit: Octokit,
     owner: string,
