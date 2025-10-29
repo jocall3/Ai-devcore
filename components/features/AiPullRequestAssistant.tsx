@@ -143,12 +143,17 @@ export const AiPullRequestAssistant: React.FC = () => {
                                 </div>
                             )}
                         </div>
-                         {summary && user && (
+                        {summary && user && (
                             <div className="mt-4 pt-4 border-t border-border">
-                                <button onClick={handleExportToDocs} disabled={isExporting} className="w-full btn-primary bg-blue-600 flex items-center justify-center gap-2 py-2">
-                                    {isExporting ? <LoadingSpinner /> : <><DocumentIcon /> Export to Google Docs</>}</n                                </button>
+                                <button
+                                    onClick={handleExportToDocs}
+                                    disabled={isExporting}
+                                    className="w-full btn-primary bg-blue-600 flex items-center justify-center gap-2 py-2"
+                                >
+                                    {isExporting ? <LoadingSpinner /> : <><DocumentIcon /> Export to Google Docs</>}
+                                </button>
                             </div>
-                         )}
+                        )}
                     </div>
                 </div>
             </div>
