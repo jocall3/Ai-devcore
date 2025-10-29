@@ -48,7 +48,7 @@ const ServiceConnectionCard: React.FC<{
                         <div key={field.id}>
                             <label className="text-xs text-text-secondary">{field.label}</label>
                             <input
-                                type={field.id.includes('token') || field.id.includes('pat') ? 'password' : 'text'}
+                                type={field.id.includes('token') || field.id.includes('pat') || field.id.includes('key') ? 'password' : 'text'}
                                 value={creds[field.id] || ''}
                                 onChange={e => setCreds(prev => ({ ...prev, [field.id]: e.target.value }))}
                                 placeholder={field.placeholder}
@@ -66,7 +66,7 @@ const ServiceConnectionCard: React.FC<{
 };
 
 
-export const WorkspaceConnectorHub: React.FC = () => {
+export const Connections: React.FC = () => {
     const { state, dispatch } = useGlobalState();
     const { user, githubUser, vaultState } = state;
     const { addNotification } = useNotification();
@@ -94,36 +94,55 @@ export const WorkspaceConnectorHub: React.FC = () => {
         return Array.from(serviceMap.values());
     }, []);
 
-    const checkConnections = useCallback(async () => {
-        if (!user || !vaultState.isUnlocked) return;
-        
-        const checkCred = async (credId: string, serviceName: string, successMessage: string) => {
-             const token = await vaultService.getDecryptedCredential(credId);
-             setConnectionStatuses(s => ({ ...s, [serviceName]: token ? successMessage : 'Not Connected' }));
-        };
-
-        await checkCred('github_pat', 'GitHub', githubUser ? `Connected as ${githubUser.login}`: 'Connected');
-        await checkCred('jira_pat', 'Jira', 'Connected');
-        await checkCred('slack_bot_token', 'Slack', 'Connected');
-
-    }, [user, vaultState.isUnlocked, githubUser]);
-
-    useEffect(() => {
-        checkConnections();
-    }, [checkConnections]);
-    
     const withVault = useCallback(async (callback: () => Promise<void>) => {
         if (!vaultState.isInitialized) {
             const created = await requestCreation();
-            if (!created) { addNotification('Vault setup is required.', 'error'); return; }
+            if (!created) { 
+                addNotification('Vault setup is required to manage connections.', 'error');
+                return; 
+            }
         }
         if (!vaultState.isUnlocked) {
             const unlocked = await requestUnlock();
-            if (!unlocked) { addNotification('Vault must be unlocked to manage connections.', 'error'); return; }
+            if (!unlocked) { 
+                addNotification('Vault must be unlocked to manage connections.', 'error');
+                const services = ['Google Gemini', 'GitHub', 'Jira', 'Slack'];
+                const lockedStatuses: Record<string, string> = {};
+                services.forEach(s => { lockedStatuses[s] = 'Vault Locked' });
+                setConnectionStatuses(lockedStatuses);
+                return;
+            }
         }
         await callback();
     }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
+    const checkConnections = useCallback(async () => {
+        if (!user) return;
+        
+        const checkCred = async (credId: string, serviceName: string, successMessage: string) => {
+            try {
+                const token = await vaultService.getDecryptedCredential(credId);
+                setConnectionStatuses(s => ({ ...s, [serviceName]: token ? successMessage : 'Not Connected' }));
+            } catch (error) {
+                console.error(`Could not retrieve credential for ${serviceName}:`, error);
+                setConnectionStatuses(s => ({ ...s, [serviceName]: 'Vault Locked' }));
+            }
+        };
+
+        await checkCred('gemini_api_key', 'Google Gemini', 'Connected');
+        await checkCred('github_pat', 'GitHub', githubUser ? `Connected as ${githubUser.login}`: 'Connected');
+        await checkCred('jira_pat', 'Jira', 'Connected');
+        await checkCred('slack_bot_token', 'Slack', 'Connected');
+
+    }, [user, githubUser]);
+
+    useEffect(() => {
+        if(user){
+            withVault(checkConnections);
+        } else {
+            setConnectionStatuses({});
+        }
+    }, [user, withVault, checkConnections]);
 
     const handleConnect = async (serviceName: string, credentials: Record<string, string>) => {
         await withVault(async () => {
@@ -138,7 +157,7 @@ export const WorkspaceConnectorHub: React.FC = () => {
                      await vaultService.saveCredential('github_user', JSON.stringify(githubProfile));
                 }
                 addNotification(`${serviceName} connected successfully!`, 'success');
-                checkConnections();
+                await checkConnections();
             } catch (e) {
                 addNotification(`Failed to connect ${serviceName}: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
             } finally {
@@ -159,7 +178,7 @@ export const WorkspaceConnectorHub: React.FC = () => {
                      await vaultService.saveCredential('github_user', '');
                 }
                 addNotification(`${serviceName} disconnected.`, 'info');
-                checkConnections();
+                await checkConnections();
             } catch(e) {
                 addNotification(`Failed to disconnect ${serviceName}.`, 'error');
             } finally {
@@ -187,7 +206,6 @@ export const WorkspaceConnectorHub: React.FC = () => {
 
     const handleSignIn = () => {
         signInWithGoogle();
-        // The result is handled by the global callback set in App.tsx
     };
 
     const selectedAction = ACTION_REGISTRY.get(selectedActionId);
@@ -210,22 +228,30 @@ export const WorkspaceConnectorHub: React.FC = () => {
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
              <header className="mb-8">
-                <h1 className="text-4xl font-extrabold tracking-tight flex items-center"><RectangleGroupIcon /><span className="ml-3">Workspace Connector Hub</span></h1>
+                <h1 className="text-4xl font-extrabold tracking-tight flex items-center"><RectangleGroupIcon /><span className="ml-3">Connections</span></h1>
                 <p className="mt-2 text-lg text-text-secondary">Connect to your development services to unlock cross-platform AI actions.</p>
             </header>
             <div className="flex-grow grid grid-cols-1 lg:grid-cols-2 gap-8 min-h-0">
                 <div className="flex flex-col gap-6 overflow-y-auto pr-4">
                     <h2 className="text-2xl font-bold">Service Connections</h2>
                     <ServiceConnectionCard 
+                        serviceName="Google Gemini"
+                        icon={<SparklesIcon />}
+                        fields={[{ id: 'gemini_api_key', label: 'API Key', placeholder: 'Your Gemini API Key' }]}
+                        onConnect={(creds) => handleConnect('Google Gemini', creds)}
+                        onDisconnect={() => handleDisconnect('Google Gemini', ['gemini_api_key'])}
+                        status={connectionStatuses['Google Gemini'] || 'Checking...'}
+                        isLoading={loadingStates['Google Gemini']}
+                    />
+                    <ServiceConnectionCard 
                         serviceName="GitHub"
                         icon={<GithubIcon />}
                         fields={[{ id: 'github_pat', label: 'Personal Access Token', placeholder: 'ghp_...' }]}
                         onConnect={(creds) => handleConnect('GitHub', creds)}
-                        onDisconnect={() => handleDisconnect('GitHub', ['github_pat'])}
+                        onDisconnect={() => handleDisconnect('GitHub', ['github_pat', 'github_user'])}
                         status={connectionStatuses.GitHub || 'Checking...'}
                         isLoading={loadingStates.GitHub}
                     />
-                     {/* Placeholder cards for Jira and Slack */}
                     <ServiceConnectionCard 
                         serviceName="Jira"
                         icon={<div className="w-10 h-10 bg-[#0052CC] rounded flex items-center justify-center text-white font-bold text-xl">J</div>}
