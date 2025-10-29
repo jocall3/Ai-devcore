@@ -12,7 +12,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@google/genai": "latest",
+    "@google/genai": "1.25.0",
     "@xstate/react": "6.0.0",
     "axe-core": "4.10.3",
     "diff": "8.0.2",
