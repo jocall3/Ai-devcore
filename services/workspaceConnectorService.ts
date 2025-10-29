@@ -1,26 +1,65 @@
+/**
+ * @file Manages the registration and execution of actions for third-party workspace connectors like Jira, Slack, etc.
+ * @version 2.0.0
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import * as vaultService from './vaultService.ts';
 import { logError, logEvent } from './telemetryService.ts';
-import { getDecryptedCredential } from './vaultService.ts';
 
-// Interface for any action
+/**
+ * Custom error thrown when an action requires authentication but the vault is locked.
+ * UI components can catch this specific error to trigger an unlock flow.
+ * @class
+ * @extends {Error}
+ */
+export class VaultLockedError extends Error {
+  /**
+   * Creates an instance of VaultLockedError.
+   * @param {string} message - The error message.
+   * @example
+   * if (!vaultService.isUnlocked()) {
+   *   throw new VaultLockedError("Vault must be unlocked.");
+   * }
+   */
+  constructor(message: string) {
+    super(message);
+    this.name = 'VaultLockedError';
+  }
+}
+
+/**
+ * @interface WorkspaceAction
+ * @description Defines the contract for any executable action within the workspace connector service.
+ */
 export interface WorkspaceAction {
-  id: string; // e.g., 'jira_create_ticket'
-  service: 'Jira' | 'Slack' | 'GitHub'; // etc.
+  /** A unique identifier for the action, e.g., 'jira_create_ticket'. */
+  id: string;
+  /** The service this action belongs to, e.g., 'Jira'. */
+  service: 'Jira' | 'Slack' | 'GitHub';
+  /** A user-friendly description of what the action does. */
   description: string;
-  // Function to define the necessary input fields for this action
-  getParameters: () => { [key: string]: { type: 'string' | 'number', required: boolean, default?: string } };
-  // The actual logic to execute the action
+  /** Specifies if the action requires credentials from the vault. Defaults to false. */
+  requiresAuth?: boolean;
+  /** A function that returns a definition of the parameters the action requires. */
+  getParameters: () => { [key: string]: { type: 'string' | 'number'; required: boolean; default?: string } };
+  /** The function that contains the logic to execute the action. */
   execute: (params: any) => Promise<any>;
 }
 
-// THE REGISTRY: This is the pattern for all services.
+/**
+ * @description A central registry for all available workspace actions.
+ * @type {Map<string, WorkspaceAction>}
+ */
 export const ACTION_REGISTRY: Map<string, WorkspaceAction> = new Map();
 
-// --- JIRA EXAMPLE ---
+// --- JIRA ACTIONS ---
 ACTION_REGISTRY.set('jira_create_ticket', {
   id: 'jira_create_ticket',
   service: 'Jira',
   description: 'Creates a new issue in a Jira project.',
+  requiresAuth: true,
   getParameters: () => ({
     projectKey: { type: 'string', required: true },
     summary: { type: 'string', required: true },
@@ -28,29 +67,16 @@ ACTION_REGISTRY.set('jira_create_ticket', {
     issueType: { type: 'string', required: true, default: 'Task' }
   }),
   execute: async (params) => {
-    const domain = await getDecryptedCredential('jira_domain');
-    const token = await getDecryptedCredential('jira_pat');
-    const email = await getDecryptedCredential('jira_email');
+    const domain = await vaultService.getDecryptedCredential('jira_domain');
+    const token = await vaultService.getDecryptedCredential('jira_pat');
+    const email = await vaultService.getDecryptedCredential('jira_email');
 
     if (!domain || !token || !email) {
         throw new Error("Jira credentials not found in vault. Please connect Jira in the Workspace Connector Hub.");
     }
     
-    // The Atlassian Document Format for the description field
     const descriptionDoc = {
-      type: 'doc',
-      version: 1,
-      content: [
-        {
-          type: 'paragraph',
-          content: [
-            {
-              text: params.description || '',
-              type: 'text'
-            }
-          ]
-        }
-      ]
+      type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ text: params.description || '', type: 'text' }] }]
     };
 
     const response = await fetch(`https://${domain}/rest/api/3/issue`, {
@@ -77,17 +103,18 @@ ACTION_REGISTRY.set('jira_create_ticket', {
   }
 });
 
-// --- SLACK EXAMPLE ---
+// --- SLACK ACTIONS ---
 ACTION_REGISTRY.set('slack_post_message', {
   id: 'slack_post_message',
   service: 'Slack',
   description: 'Posts a message to a Slack channel.',
+  requiresAuth: true,
   getParameters: () => ({
-    channel: { type: 'string', required: true }, // e.g., #engineering or C1234567
+    channel: { type: 'string', required: true, default: '#general' },
     text: { type: 'string', required: true }
   }),
   execute: async (params) => {
-    const token = await getDecryptedCredential('slack_bot_token');
+    const token = await vaultService.getDecryptedCredential('slack_bot_token');
     if (!token) {
         throw new Error("Slack credentials not found in vault. Please connect Slack in the Workspace Connector Hub.");
     }
@@ -111,12 +138,39 @@ ACTION_REGISTRY.set('slack_post_message', {
 });
 
 
-// --- CENTRAL EXECUTION FUNCTION ---
+/**
+ * The central execution function for all workspace actions. It checks for vault status
+ * before executing actions that require authentication.
+ * @param {string} actionId - The ID of the action to execute.
+ * @param {any} params - The parameters for the action.
+ * @returns {Promise<any>} The result of the action's execute function.
+ * @throws {Error} if the action is not found.
+ * @throws {VaultLockedError} if the action requires authentication and the vault is locked.
+ * @example
+ * try {
+ *   const result = await executeWorkspaceAction('jira_create_ticket', { projectKey: 'PROJ', summary: 'New ticket' });
+ *   console.log('Ticket created:', result);
+ * } catch (e) {
+ *   if (e instanceof VaultLockedError) {
+ *     // prompt user to unlock vault
+ *   } else {
+ *     console.error('Action failed:', e);
+ *   }
+ * }
+ */
 export async function executeWorkspaceAction(actionId: string, params: any): Promise<any> {
     const action = ACTION_REGISTRY.get(actionId);
     if (!action) {
         throw new Error(`Action "${actionId}" not found.`);
     }
+
+    // FIX: Check if the action requires an unlocked vault before proceeding.
+    // This allows the UI to catch a specific 'VaultLockedError' and prompt the user.
+    if (action.requiresAuth && !vaultService.isUnlocked()) {
+      logEvent('workspace_action_blocked', { actionId, reason: 'vault_locked' });
+      throw new VaultLockedError('Vault is locked. Unlock the vault to execute this action.');
+    }
+
     logEvent('workspace_action_execute', { actionId });
     try {
         const result = await action.execute(params);

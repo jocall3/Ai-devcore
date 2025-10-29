@@ -1,10 +1,29 @@
+/**
+ * @file Renders the main desktop environment, including the feature dock, windows, and taskbar.
+ * It manages the state of all open, closed, and minimized windows and triggers the vault unlock prompt on startup.
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { FeatureDock } from './FeatureDock.tsx';
 import { Window } from './Window.tsx';
 import { Taskbar } from './Taskbar.tsx';
 import { ALL_FEATURES } from '../features/index.tsx';
 import type { Feature } from '../../types.ts';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { isVaultInitialized } from '../../services/vaultService.ts';
 
+/**
+ * @interface WindowState
+ * @description Represents the state of a single window on the desktop.
+ * @property {string} id - The unique identifier for the window, matching the feature ID.
+ * @property {{ x: number; y: number }} position - The x and y coordinates of the window.
+ * @property {{ width: number; height: number }} size - The width and height of the window.
+ * @property {number} zIndex - The z-index for stacking order.
+ * @property {boolean} isMinimized - Whether the window is currently minimized to the taskbar.
+ */
 interface WindowState {
   id: string;
   position: { x: number; y: number };
@@ -13,12 +32,54 @@ interface WindowState {
   isMinimized: boolean;
 }
 
+/**
+ * @interface DesktopViewProps
+ * @description Props for the DesktopView component.
+ * @property {string} [openFeatureId] - If provided, the feature with this ID will be opened automatically.
+ */
+interface DesktopViewProps {
+  openFeatureId?: string;
+}
+
 const Z_INDEX_BASE = 10;
 
-export const DesktopView: React.FC<{ openFeatureId?: string }> = ({ openFeatureId }) => {
+/**
+ * The main desktop view component that acts as a window manager.
+ * On mount, it checks if the credential vault is initialized and prompts the user to unlock it if necessary.
+ * @param {DesktopViewProps} props - The props for the component.
+ * @returns {React.ReactElement} The rendered desktop view.
+ * @example
+ * <DesktopView openFeatureId="ai-code-explainer" />
+ */
+export const DesktopView: React.FC<DesktopViewProps> = ({ openFeatureId }) => {
     const [windows, setWindows] = useState<Record<string, WindowState>>({});
     const [activeId, setActiveId] = useState<string | null>(null);
     const [nextZIndex, setNextZIndex] = useState(Z_INDEX_BASE);
+    const { state, dispatch } = useGlobalState();
+    const { requestUnlock } = useVaultModal();
+
+    // Check vault initialization status on component mount.
+    useEffect(() => {
+        const checkInitialization = async () => {
+            try {
+                const initialized = await isVaultInitialized();
+                dispatch({ type: 'SET_VAULT_STATE', payload: { isInitialized: initialized } });
+            } catch (error) {
+                console.error("Failed to check vault initialization status:", error);
+            }
+        };
+        checkInitialization();
+    }, [dispatch]);
+
+    // Prompt to unlock the vault if it's initialized but locked.
+    useEffect(() => {
+        const promptToUnlock = async () => {
+            if (state.vaultState.isInitialized && !state.vaultState.isUnlocked) {
+                await requestUnlock();
+            }
+        };
+        promptToUnlock();
+    }, [state.vaultState.isInitialized, state.vaultState.isUnlocked, requestUnlock]);
     
     const openWindow = useCallback((featureId: string) => {
         const newZIndex = nextZIndex + 1;

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as vaultService from '../../services/vaultService.ts';
 import { LoadingSpinner } from '../shared/LoadingSpinner.tsx';
 
@@ -16,6 +16,12 @@ export const UnlockVaultModal: React.FC<Props> = ({ onSuccess, onCancel }) => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        // Automatically focus the password input when the modal appears
+        inputRef.current?.focus();
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -24,9 +30,13 @@ export const UnlockVaultModal: React.FC<Props> = ({ onSuccess, onCancel }) => {
 
         try {
             await vaultService.unlockVault(password);
+            // On success, the parent component will unmount this modal.
+            // We don't set loading to false to avoid a React state update on an unmounted component.
             onSuccess();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+            const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
+            // Provide a more user-friendly error in case of failure.
+            setError(`Unlock failed: ${message}. Please check your password and try again.`);
             setIsLoading(false);
         }
     };
@@ -42,17 +52,17 @@ export const UnlockVaultModal: React.FC<Props> = ({ onSuccess, onCancel }) => {
                     <div>
                         <label className="block text-sm font-medium">Master Password</label>
                         <input
+                            ref={inputRef}
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             className="w-full mt-1 p-2 bg-background border border-border rounded-md"
                             required
-                            autoFocus
                         />
                     </div>
                     {error && <p className="text-red-500 text-sm">{error}</p>}
                     <div className="flex justify-end gap-2 pt-2">
-                        <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-100 rounded-md">Cancel</button>
+                        <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-100 dark:bg-slate-700 rounded-md hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
                         <button type="submit" disabled={isLoading} className="btn-primary px-4 py-2 min-w-[100px] flex justify-center">
                             {isLoading ? <LoadingSpinner /> : 'Unlock'}
                         </button>

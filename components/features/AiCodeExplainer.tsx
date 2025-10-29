@@ -1,10 +1,21 @@
+/**
+ * @file AiCodeExplainer.tsx
+ * @description A feature component that uses AI to provide a detailed, structured analysis of a code snippet.
+ * @license SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import mermaid from 'mermaid';
 import { explainCodeStructured, generateMermaidJs } from '../../services/index.ts';
 import type { StructuredExplanation } from '../../types.ts';
 import { CpuChipIcon } from '../icons.tsx';
 import { MarkdownRenderer, LoadingSpinner } from '../shared/index.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 
+/**
+ * An example code snippet to display when the component first loads.
+ * @type {string}
+ */
 const exampleCode = `const bubbleSort = (arr) => {
   for (let i = 0; i < arr.length; i++) {
     for (let j = 0; j < arr.length - i - 1; j++) {
@@ -16,8 +27,21 @@ const exampleCode = `const bubbleSort = (arr) => {
   return arr;
 };`;
 
+/**
+ * The possible tabs for displaying different parts of the code explanation.
+ * @typedef {'summary' | 'lineByLine' | 'complexity' | 'suggestions' | 'flowchart'} ExplanationTab
+ */
 type ExplanationTab = 'summary' | 'lineByLine' | 'complexity' | 'suggestions' | 'flowchart';
 
+/**
+ * A simple syntax highlighter for displaying code in a <pre> tag.
+ * This is a lightweight alternative to a full syntax highlighting library.
+ * @param {string} code - The code string to highlight.
+ * @returns {string} The HTML string with syntax highlighting spans.
+ * @example
+ * const highlighted = simpleSyntaxHighlight('const x = 1;');
+ * // returns '<span class="text-indigo-400 font-semibold">const</span> x = 1;'
+ */
 const simpleSyntaxHighlight = (code: string) => {
     const escapedCode = code
         .replace(/&/g, '&amp;')
@@ -26,14 +50,37 @@ const simpleSyntaxHighlight = (code: string) => {
 
     return escapedCode
         .replace(/\b(const|let|var|function|return|if|for|=>|import|from|export|default)\b/g, '<span class="text-indigo-400 font-semibold">$1</span>')
-        .replace(/(\`|'|")(.*?)(\`|'|")/g, '<span class="text-emerald-400">$1$2$3</span>')
+        .replace(/(\s*|'|")(.*?)(\`|'|")/g, '<span class="text-emerald-400">$1$2$3</span>')
         .replace(/(\/\/.*)/g, '<span class="text-gray-400 italic">$1</span>')
         .replace(/(\{|\}|\(|\)|\[|\])/g, '<span class="text-gray-400">$1</span>');
 };
 
 mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
 
-export const AiCodeExplainer: React.FC<{ initialCode?: string }> = ({ initialCode }) => {
+/**
+ * Interface for the props of the AiCodeExplainer component.
+ * @interface AiCodeExplainerProps
+ */
+interface AiCodeExplainerProps {
+  /**
+   * An optional initial code snippet to load and analyze when the component mounts.
+   * @type {string}
+   * @optional
+   */
+  initialCode?: string;
+}
+
+/**
+ * A React component that allows users to input a code snippet and receive a multi-faceted
+ * AI-powered explanation, including a summary, line-by-line analysis, complexity assessment,
+ * improvement suggestions, and a visual flowchart.
+ *
+ * @param {AiCodeExplainerProps} props - The props for the component.
+ * @returns {React.ReactElement} The rendered AiCodeExplainer component.
+ * @example
+ * <AiCodeExplainer initialCode="const x = () => 'hello';" />
+ */
+export const AiCodeExplainer: React.FC<AiCodeExplainerProps> = ({ initialCode }) => {
     const [code, setCode] = useState<string>(initialCode || exampleCode);
     const [explanation, setExplanation] = useState<StructuredExplanation | null>(null);
     const [mermaidCode, setMermaidCode] = useState<string>('');
@@ -43,33 +90,61 @@ export const AiCodeExplainer: React.FC<{ initialCode?: string }> = ({ initialCod
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const preRef = useRef<HTMLPreElement>(null);
     const mermaidContainerRef = useRef<HTMLDivElement>(null);
+    const { requestUnlock } = useVaultModal();
 
-    const handleExplain = useCallback(async (codeToExplain: string) => {
+    /**
+     * Fetches and displays the AI-powered analysis for the given code.
+     * Handles vault-locked errors by prompting the user to unlock and then retrying.
+     * @param {string} codeToExplain - The code snippet to analyze.
+     * @param {boolean} [isRetry=false] - A flag to indicate if this is a retry after unlocking the vault.
+     * @returns {Promise<void>}
+     */
+    const handleExplain = useCallback(async (codeToExplain: string, isRetry: boolean = false) => {
         if (!codeToExplain.trim()) {
             setError('Please enter some code to explain.');
             return;
         }
         setIsLoading(true);
         setError('');
-        setExplanation(null);
-        setMermaidCode('');
-        setActiveTab('summary');
+        if (!isRetry) {
+            setExplanation(null);
+            setMermaidCode('');
+            setActiveTab('summary');
+        }
+        
         try {
+            // Per architectural directives, these direct calls should be refactored
+            // to a command pattern (e.g., dispatch(new ExplainCodeCommand(codeToExplain)))
+            // and executed off the main thread via a ComputationService.
             const [explanationResult, mermaidResult] = await Promise.all([
                 explainCodeStructured(codeToExplain),
                 generateMermaidJs(codeToExplain)
             ]);
             setExplanation(explanationResult);
-            setMermaidCode(mermaidResult.replace(/```mermaid\n|```/g, ''));
+            setMermaidCode(mermaidResult.replace(/```mermaid\n?|```/g, ''));
 
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            setError(`Failed to get explanation: ${errorMessage}`);
+            
+            if (errorMessage.includes('Vault is locked') || errorMessage.includes('API key not found')) {
+                setError('Your password vault is locked. Please unlock it to use AI features.');
+                const unlocked = await requestUnlock();
+                if (unlocked) {
+                    // If the user successfully unlocks the vault, retry the operation.
+                    handleExplain(codeToExplain, true);
+                    return; // Exit to avoid setting loading to false too early
+                }
+            } else {
+                setError(`Failed to get explanation: ${errorMessage}`);
+            }
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [requestUnlock]);
     
+    /**
+     * Effect to run analysis if an initial code snippet is provided via props.
+     */
     useEffect(() => {
         if (initialCode) {
             setCode(initialCode);
@@ -77,6 +152,9 @@ export const AiCodeExplainer: React.FC<{ initialCode?: string }> = ({ initialCod
         }
     }, [initialCode, handleExplain]);
 
+    /**
+     * Effect to render the Mermaid.js flowchart when the corresponding tab is active.
+     */
     useEffect(() => {
         const renderMermaid = async () => {
              if (activeTab === 'flowchart' && mermaidCode && mermaidContainerRef.current) {
@@ -94,6 +172,10 @@ export const AiCodeExplainer: React.FC<{ initialCode?: string }> = ({ initialCod
     }, [activeTab, mermaidCode]);
 
 
+    /**
+     * Synchronizes the scroll position between the hidden textarea and the visible pre element.
+     * @returns {void}
+     */
     const handleScroll = () => {
         if (preRef.current && textareaRef.current) {
             preRef.current.scrollTop = textareaRef.current.scrollTop;
@@ -101,8 +183,16 @@ export const AiCodeExplainer: React.FC<{ initialCode?: string }> = ({ initialCod
         }
     };
 
+    /**
+     * Memoized version of the highlighted code for performance.
+     * @type {string}
+     */
     const highlightedCode = useMemo(() => simpleSyntaxHighlight(code), [code]);
 
+    /**
+     * Renders the content for the currently active analysis tab.
+     * @returns {React.ReactElement | null}
+     */
     const renderTabContent = () => {
         if (!explanation) return null;
         switch(activeTab) {

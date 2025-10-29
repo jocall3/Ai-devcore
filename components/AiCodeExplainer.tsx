@@ -4,6 +4,7 @@ import { explainCodeStructured, generateMermaidJs } from '../services/index.ts';
 import type { StructuredExplanation } from '../types.ts';
 import { CpuChipIcon } from './icons.tsx';
 import { MarkdownRenderer, LoadingSpinner } from './shared/index.tsx';
+import { useVaultModal } from '../contexts/VaultModalContext.tsx';
 
 const exampleCode = `const bubbleSort = (arr) => {
   for (let i = 0; i < arr.length; i++) {
@@ -26,7 +27,7 @@ const simpleSyntaxHighlight = (code: string) => {
 
     return escapedCode
         .replace(/\b(const|let|var|function|return|if|for|=>|import|from|export|default)\b/g, '<span class="text-indigo-400 font-semibold">$1</span>')
-        .replace(/(\`|'|")(.*?)(\`|'|")/g, '<span class="text-emerald-400">$1$2$3</span>')
+        .replace(/(\s*|'|")(.*?)(\s*|'|")/g, '<span class="text-emerald-400">$1$2$3</span>')
         .replace(/(\/\/.*)/g, '<span class="text-gray-400 italic">$1</span>')
         .replace(/(\{|\}|\(|\)|\[|\])/g, '<span class="text-gray-400">$1</span>');
 };
@@ -44,6 +45,8 @@ export const AiCodeExplainer: React.FC<{ initialCode?: string }> = ({ initialCod
     const preRef = useRef<HTMLPreElement>(null);
     const mermaidContainerRef = useRef<HTMLDivElement>(null);
 
+    const { requestUnlock } = useVaultModal();
+
     const handleExplain = useCallback(async (codeToExplain: string) => {
         if (!codeToExplain.trim()) {
             setError('Please enter some code to explain.');
@@ -54,21 +57,40 @@ export const AiCodeExplainer: React.FC<{ initialCode?: string }> = ({ initialCod
         setExplanation(null);
         setMermaidCode('');
         setActiveTab('summary');
-        try {
-            const [explanationResult, mermaidResult] = await Promise.all([
+        
+        const performExplain = async () => {
+             const [explanationResult, mermaidResult] = await Promise.all([
                 explainCodeStructured(codeToExplain),
                 generateMermaidJs(codeToExplain)
             ]);
             setExplanation(explanationResult);
             setMermaidCode(mermaidResult.replace(/```mermaid\n|```/g, ''));
+        };
 
+        try {
+            await performExplain();
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            setError(`Failed to get explanation: ${errorMessage}`);
+            
+            if (errorMessage.includes("Vault is locked") || errorMessage.includes("API key not found")) {
+                const unlocked = await requestUnlock();
+                if (unlocked) {
+                    try {
+                        await performExplain(); // Retry
+                    } catch (retryErr) {
+                        const retryErrorMessage = retryErr instanceof Error ? retryErr.message : 'An unknown error occurred on retry.';
+                        setError(`Failed to get explanation after unlock: ${retryErrorMessage}`);
+                    }
+                } else {
+                    setError('Vault remains locked. Cannot get explanation.');
+                }
+            } else {
+                setError(`Failed to get explanation: ${errorMessage}`);
+            }
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [requestUnlock]);
     
     useEffect(() => {
         if (initialCode) {

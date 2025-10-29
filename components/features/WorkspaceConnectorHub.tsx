@@ -95,11 +95,28 @@ export const WorkspaceConnectorHub: React.FC = () => {
     }, []);
 
     const checkConnections = useCallback(async () => {
-        if (!user || !vaultState.isUnlocked) return;
+        if (!user || !vaultState.isUnlocked) {
+            const lockedStatus = vaultState.isInitialized ? 'Vault Locked' : 'Vault not set up';
+            setConnectionStatuses({
+                'Google Gemini': lockedStatus,
+                'GitHub': lockedStatus,
+                'Jira': lockedStatus,
+                'Slack': lockedStatus,
+            });
+            return;
+        }
         
         const checkCred = async (credId: string, serviceName: string, successMessage: string) => {
-             const token = await vaultService.getDecryptedCredential(credId);
-             setConnectionStatuses(s => ({ ...s, [serviceName]: token ? successMessage : 'Not Connected' }));
+             try {
+                const token = await vaultService.getDecryptedCredential(credId);
+                setConnectionStatuses(s => ({ ...s, [serviceName]: token ? successMessage : 'Not Connected' }));
+             } catch (error) {
+                console.error(`Failed to check credential for ${serviceName}:`, error);
+                setConnectionStatuses(s => ({ ...s, [serviceName]: 'Error checking status' }));
+                if (error instanceof Error && error.message.includes("locked")) {
+                     dispatch({ type: 'SET_VAULT_STATE', payload: { isUnlocked: false } });
+                }
+             }
         };
 
         await checkCred('gemini_api_key', 'Google Gemini', 'Connected');
@@ -107,7 +124,7 @@ export const WorkspaceConnectorHub: React.FC = () => {
         await checkCred('jira_pat', 'Jira', 'Connected');
         await checkCred('slack_bot_token', 'Slack', 'Connected');
 
-    }, [user, vaultState.isUnlocked, githubUser]);
+    }, [user, vaultState.isUnlocked, vaultState.isInitialized, githubUser, dispatch]);
 
     useEffect(() => {
         checkConnections();

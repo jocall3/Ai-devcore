@@ -1,12 +1,12 @@
-
 import React, { useState, useMemo, useCallback } from 'react';
-import { generatePrSummaryStructured, generateTechnicalSpecFromDiff, downloadFile } from '../../services/index.ts';
+import { generatePrSummaryStructured, generateTechnicalSpecFromDiff } from '../../services/index.ts';
 import { createDocument, insertText } from '../../services/workspaceService.ts';
 import type { StructuredPrSummary } from '../../types.ts';
 import { AiPullRequestAssistantIcon, DocumentIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 
 const exampleDiff = `--- a/src/components/Greeter.js
 +++ b/src/components/Greeter.js
@@ -27,46 +27,71 @@ export const AiPullRequestAssistant: React.FC = () => {
 
     const { addNotification } = useNotification();
     const { state } = useGlobalState();
-    const { user } = state;
+    const { user, vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+
+    const withVault = useCallback(async (callback: () => Promise<void>) => {
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (!created) {
+                addNotification('Vault setup is required to use this feature.', 'error');
+                return;
+            }
+        } else if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (!unlocked) {
+                addNotification('Vault must be unlocked to use this feature.', 'error');
+                return;
+            }
+        }
+        await callback();
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
     const handleGenerateSummary = useCallback(async () => {
         if (!diff.trim()) {
             setError('Please provide a diff to generate a summary.');
             return;
         }
-        setIsLoading(true);
-        setError('');
-        setSummary(null);
-        
-        try {
-            const result: StructuredPrSummary = await generatePrSummaryStructured(diff);
-            setSummary(result);
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            setError(`Failed to generate summary: ${errorMessage}`);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [diff]);
+
+        await withVault(async () => {
+            setIsLoading(true);
+            setError('');
+            setSummary(null);
+            
+            try {
+                const result: StructuredPrSummary = await generatePrSummaryStructured(diff);
+                setSummary(result);
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+                setError(`Failed to generate summary: ${errorMessage}`);
+                addNotification(`Failed to generate summary: ${errorMessage}`, 'error');
+            } finally {
+                setIsLoading(false);
+            }
+        });
+    }, [diff, withVault, addNotification]);
 
     const handleExportToDocs = async () => {
         if (!summary || !user) {
             addNotification('Please generate a summary first and ensure you are signed in.', 'error');
             return;
         }
-        setIsExporting(true);
-        try {
-            const specContent = await generateTechnicalSpecFromDiff(diff, summary);
-            const doc = await createDocument(`Tech Spec: ${summary.title}`);
-            await insertText(doc.documentId, specContent);
-            addNotification('Successfully exported to Google Docs!', 'success');
-            window.open(doc.webViewLink, '_blank');
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            addNotification(`Failed to export: ${errorMessage}`, 'error');
-        } finally {
-            setIsExporting(false);
-        }
+
+        await withVault(async () => {
+            setIsExporting(true);
+            try {
+                const specContent = await generateTechnicalSpecFromDiff(diff, summary);
+                const doc = await createDocument(`Tech Spec: ${summary.title}`);
+                await insertText(doc.documentId, specContent);
+                addNotification('Successfully exported to Google Docs!', 'success');
+                window.open(doc.webViewLink, '_blank');
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+                addNotification(`Failed to export: ${errorMessage}`, 'error');
+            } finally {
+                setIsExporting(false);
+            }
+        });
     };
     
     return (
@@ -121,8 +146,7 @@ export const AiPullRequestAssistant: React.FC = () => {
                          {summary && user && (
                             <div className="mt-4 pt-4 border-t border-border">
                                 <button onClick={handleExportToDocs} disabled={isExporting} className="w-full btn-primary bg-blue-600 flex items-center justify-center gap-2 py-2">
-                                    {isExporting ? <LoadingSpinner /> : <><DocumentIcon /> Export to Google Docs</>}
-                                </button>
+                                    {isExporting ? <LoadingSpinner /> : <><DocumentIcon /> Export to Google Docs</>}</n                                </button>
                             </div>
                          )}
                     </div>

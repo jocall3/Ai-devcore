@@ -1,0 +1,39 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "./services",
+    "./components",
+    "./hooks",
+    "./utils",
+    "./contexts",
+    "./App.tsx",
+    "./types.ts"
+  ],
+  "entryPointStrategy": "expand",
+  "out": "docs",
+  "tsconfig": "tsconfig.json",
+  "readme": "README.md",
+  "name": "DevCore AI Toolkit - Technical Documentation",
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "node_modules/**/*",
+    "dist/**/*",
+    "web/**/*",
+    "public/**/*",
+    ".github/**/*",
+    "vite.config.ts",
+    "postcss.config.js",
+    "tailwind.config.js"
+  ],
+  "excludeExternals": true,
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "gitRevision": "main",
+  "theme": "default",
+  "plugin": [
+    "typedoc-plugin-merge-modules"
+  ],
+  "includeVersion": true,
+  "hideGenerator": true
+}
