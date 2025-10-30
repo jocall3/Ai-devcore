@@ -1,5 +1,8 @@
+```typescript
 import React, { useState, useCallback } from 'react';
-import { aiService, ICommand, IAiProvider } from '../../services/index.ts';
+import { IAIEngineService, ICommand, IAiProvider } from '../../modules/ai-engine/i-ai-engine.service';
+import { useService } from '../../core/ioc/use-service.hook';
+import { SERVICE_IDENTIFIER } from '../../modules/service.registry';
 import { CpuChipIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
@@ -28,6 +31,9 @@ export const TerraformGenerator: React.FC = () => {
     const { requestUnlock, requestCreation } = useVaultModal();
     const { addNotification } = useNotification();
 
+    // Retrieve the AI Engine service from the IoC container
+    const aiEngineService = useService<IAIEngineService>(SERVICE_IDENTIFIER.AIEngineService);
+
     const handleGenerate = useCallback(async () => {
         if (!description.trim()) {
             setError('Please provide a description.');
@@ -40,7 +46,7 @@ export const TerraformGenerator: React.FC = () => {
         const executeGeneration = async () => {
             const context = 'User might have existing VPCs. Check before creating new ones.';
             const command = new GenerateTerraformConfigCommand(cloud, description, context);
-            const result = await aiService.execute(command) as string;
+            const result = await aiEngineService.execute(command) as string; // Use the injected aiEngineService
             setConfig(result);
         };
 
@@ -53,7 +59,7 @@ export const TerraformGenerator: React.FC = () => {
                 const unlocked = await requestUnlock();
                 if (!unlocked) { throw new Error('Vault must be unlocked to use AI features.'); }
             }
-            
+
             await executeGeneration();
             addNotification('Terraform configuration generated successfully!', 'success');
         } catch (err) {
@@ -63,7 +69,7 @@ export const TerraformGenerator: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [description, cloud, vaultState, requestCreation, requestUnlock, addNotification]);
+    }, [description, cloud, vaultState, requestCreation, requestUnlock, addNotification, aiEngineService]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
@@ -101,3 +107,4 @@ export const TerraformGenerator: React.FC = () => {
         </div>
     );
 };
+```
