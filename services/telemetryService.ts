@@ -1,5 +1,3 @@
-
-
 const isTelemetryEnabled = true; // Could be controlled by a setting
 
 const sanitizePayload = (payload: Record<string, any>): Record<string, any> => {
