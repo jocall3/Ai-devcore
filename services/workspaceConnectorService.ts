@@ -1,4 +1,4 @@
-```typescript
+
 /**
  * @file Manages the registration and execution of actions for third-party workspace connectors like Jira, Slack, GitHub, etc.
  * @version 2.0.0
@@ -273,4 +273,3 @@ export async function executeWorkspaceAction(actionId: string, params: any): Pro
         throw error;
     }
 }
-```
