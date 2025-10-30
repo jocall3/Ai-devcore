@@ -7,8 +7,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenAI } from "@google/genai";
-import type { GenerateContentResponse, FunctionDeclaration } from "@google/genai";
+import { GoogleGenerativeAI, Part, FunctionDeclaration, GenerateContentStreamResult, FunctionCall } from "@google/genai";
 import { logError } from './telemetryService.ts';
 
 /**
@@ -38,12 +37,6 @@ export interface IAiProvider {
    * @param {string} systemInstruction - System-level instructions to guide the model's behavior.
    * @param {number} [temperature=0.5] - The sampling temperature for the model's response.
    * @returns {AsyncGenerator<string, void, unknown>} An async generator that yields chunks of the response text.
-   * @example
-   * const provider = new GeminiProvider(apiKey);
-   * const stream = provider.streamContent("Write a short story.", "You are a creative writer.", 0.8);
-   * for await (const chunk of stream) {
-   *   console.log(chunk);
-   * }
    */
   streamContent(prompt: string | { parts: any[] }, systemInstruction: string, temperature?: number): AsyncGenerator<string, void, unknown>;
 
@@ -53,10 +46,6 @@ export interface IAiProvider {
    * @param {string} systemInstruction - System-level instructions to guide the model's behavior.
    * @param {number} [temperature=0.5] - The sampling temperature for the model's response.
    * @returns {Promise<string>} A promise that resolves to the full text response from the model.
-   * @example
-   * const provider = new GeminiProvider(apiKey);
-   * const response = await provider.generateContent("What is the capital of France?", "You are a helpful assistant.", 0.2);
-   * console.log(response); // "Paris"
    */
   generateContent(prompt: string, systemInstruction: string, temperature?: number): Promise<string>;
   
@@ -68,10 +57,6 @@ export interface IAiProvider {
    * @param {any} schema - The JSON schema the response must conform to.
    * @param {number} [temperature=0.2] - The sampling temperature for the model's response.
    * @returns {Promise<T>} A promise that resolves to the parsed JSON object of type T.
-   * @example
-   * const schema = { type: Type.OBJECT, properties: { city: { type: Type.STRING } } };
-   * const result = await provider.generateJson<{ city: string }>("Where is the Eiffel Tower?", "You respond in JSON.", schema, 0.1);
-   * console.log(result.city); // "Paris"
    */
   generateJson<T>(prompt: any, systemInstruction: string, schema: any, temperature?: number): Promise<T>;
 
@@ -81,10 +66,6 @@ export interface IAiProvider {
    * @param {FunctionDeclaration[]} functionDeclarations - An array of function declarations available to the model.
    * @param {string} knowledgeBase - Additional context or knowledge for the model.
    * @returns {Promise<CommandResponse>} A promise that resolves to a CommandResponse object.
-   * @example
-   * const tools = [{ functionDeclarations: [{ name: 'getWeather', description: 'Gets weather for a city', parameters: { ... } }] }];
-   * const response = await provider.getInferenceFunction("What's the weather in London?", tools, "");
-   * if (response.functionCalls) { console.log(response.functionCalls[0].name); }
    */
   getInferenceFunction(prompt: string, functionDeclarations: FunctionDeclaration[], knowledgeBase: string): Promise<CommandResponse>;
 
@@ -92,9 +73,6 @@ export interface IAiProvider {
    * Generates a single image from a text prompt.
    * @param {string} prompt - The text prompt describing the image.
    * @returns {Promise<string>} A promise that resolves to a base64-encoded data URL of the generated image.
-   * @example
-   * const imageUrl = await provider.generateImage("A photorealistic cat wearing a wizard hat.");
-   * // Use imageUrl in an <img> src attribute
    */
   generateImage(prompt: string): Promise<string>;
 
@@ -104,8 +82,6 @@ export interface IAiProvider {
    * @param {string} base64Image - The base64-encoded source image.
    * @param {string} mimeType - The MIME type of the source image.
    * @returns {Promise<string>} A promise that resolves to a base64-encoded data URL of the generated image.
-   * @example
-   * const newImageUrl = await provider.generateImageFromImageAndText("Make it look like a Van Gogh painting.", base64ImageData, "image/png");
    */
   generateImageFromImageAndText(prompt: string, base64Image: string, mimeType: string): Promise<string>;
 }
@@ -119,24 +95,21 @@ export interface IAiProvider {
 export class GeminiProvider implements IAiProvider {
   /**
    * @private
-   * @type {GoogleGenAI}
-   * @description The instance of the GoogleGenAI client.
+   * @type {GoogleGenerativeAI}
+   * @description The instance of the GoogleGenerativeAI client.
    */
-  private ai: GoogleGenAI;
+  private ai: GoogleGenerativeAI;
 
   /**
    * Creates an instance of GeminiProvider.
    * @param {string} apiKey - The Google Gemini API key.
    * @throws {Error} If the API key is not provided.
-   * @example
-   * const apiKey = await getDecryptedCredential('gemini_api_key');
-   * const geminiProvider = new GeminiProvider(apiKey);
    */
   constructor(apiKey: string) {
     if (!apiKey) {
       throw new Error("Google Gemini API key is required to initialize GeminiProvider.");
     }
-    this.ai = new GoogleGenAI({ apiKey });
+    this.ai = new GoogleGenerativeAI(apiKey);
   }
 
   /**
@@ -144,22 +117,26 @@ export class GeminiProvider implements IAiProvider {
    */
   async *streamContent(prompt: string | { parts: any[] }, systemInstruction: string, temperature = 0.5): AsyncGenerator<string, void, unknown> {
     try {
-        const response = await this.ai.models.generateContentStream({
-            model: 'gemini-1.5-flash',
-            contents: prompt as any,
-            config: { systemInstruction, temperature }
-        });
+      const model = this.ai.getGenerativeModel({ 
+        model: 'gemini-1.5-flash',
+        systemInstruction: { role: 'user', parts: [{ text: systemInstruction }] },
+        generationConfig: { temperature }
+      });
+      
+      const contents = typeof prompt === 'string' ? [{ role: 'user', parts: [{ text: prompt }] }] : [{ role: 'user', parts: prompt.parts }];
+      const result: GenerateContentStreamResult = await model.generateContentStream({ contents });
 
-        for await (const chunk of response) {
-            yield chunk.text();
-        }
+      for await (const chunk of result.stream) {
+          if (chunk.text) {
+              yield chunk.text();
+          }
+      }
     } catch (error) {
-        console.error("Error streaming from Gemini model:", error);
         logError(error as Error, { prompt, systemInstruction });
         if (error instanceof Error) {
-            yield `An error occurred while communicating with the Gemini model: ${error.message}`;
+            yield `An error occurred with the Gemini model: ${error.message}`;
         } else {
-            yield "An unknown error occurred while generating the response.";
+            yield "An unknown error occurred during the request.";
         }
     }
   }
@@ -169,14 +146,14 @@ export class GeminiProvider implements IAiProvider {
    */
   async generateContent(prompt: string, systemInstruction: string, temperature = 0.5): Promise<string> {
     try {
-        const response = await this.ai.models.generateContent({
-            model: 'gemini-1.5-flash',
-            contents: prompt,
-            config: { systemInstruction, temperature }
-        });
-        return response.text();
+      const model = this.ai.getGenerativeModel({ 
+        model: 'gemini-1.5-flash',
+        systemInstruction: { role: 'user', parts: [{ text: systemInstruction }] },
+        generationConfig: { temperature }
+      });
+      const result = await model.generateContent({ contents: [{ role: 'user', parts: [{ text: prompt }] }] });
+      return result.response.text();
     } catch (error) {
-        console.error("Error generating content from Gemini model:", error);
         logError(error as Error, { prompt, systemInstruction });
         throw error;
     }
@@ -186,23 +163,36 @@ export class GeminiProvider implements IAiProvider {
    * @inheritdoc
    */
   async generateJson<T>(prompt: any, systemInstruction: string, schema: any, temperature = 0.2): Promise<T> {
-    try {
-        const response = await this.ai.models.generateContent({
-            model: "gemini-1.5-flash",
-            contents: prompt,
-            config: {
-                systemInstruction,
-                responseMimeType: "application/json",
-                responseSchema: schema,
-                temperature,
-            }
-        });
-        return JSON.parse(response.text().trim());
-    } catch (error) {
-        console.error("Error generating JSON from Gemini model:", error);
-        logError(error as Error, { prompt, systemInstruction });
-        throw error;
-    }
+      try {
+          const model = this.ai.getGenerativeModel({
+              model: "gemini-1.5-flash",
+              systemInstruction: { role: 'user', parts: [{ text: systemInstruction }] },
+              generationConfig: { temperature, responseMimeType: "application/json" },
+              tools: [{
+                  functionDeclarations: [{
+                      name: 'json_output',
+                      description: 'Formats the output as a JSON object matching the provided schema.',
+                      parameters: schema,
+                  }]
+              }],
+              toolConfig: { functionCallingConfig: { mode: 'ONE_CALL', allowedFunctionNames: ['json_output'] } },
+          });
+
+          const result = await model.generateContent(typeof prompt === 'string' ? prompt : JSON.stringify(prompt));
+          const call = result.response.functionCalls()?.[0];
+          if (call?.args) {
+              return call.args as T;
+          }
+          // Fallback if the model returns raw JSON in text despite function calling setup
+          const textResponse = result.response.text().trim();
+          if (textResponse) {
+              return JSON.parse(textResponse) as T;
+          }
+          throw new Error('AI did not return a valid JSON object.');
+      } catch (error) {
+          logError(error as Error, { prompt, systemInstruction });
+          throw error;
+      }
   }
 
   /**
@@ -210,15 +200,20 @@ export class GeminiProvider implements IAiProvider {
    */
   async getInferenceFunction(prompt: string, functionDeclarations: FunctionDeclaration[], knowledgeBase: string): Promise<CommandResponse> {
     try {
-        const response: GenerateContentResponse = await this.ai.models.generateContent({ model: "gemini-1.5-flash", contents: prompt, config: { systemInstruction: `You are a helpful assistant for a developer tool. You must decide which function to call to satisfy the user's request, based on your knowledge base. If no specific tool seems appropriate, respond with text.\n\nKnowledge Base:\n${knowledgeBase}`, tools: [{ functionDeclarations }] } });
-        const functionCalls: { name: string, args: any }[] = [];
-        const parts = response.candidates?.[0]?.content?.parts ?? [];
-        for (const part of parts) { 
-            if (part.functionCall && part.functionCall.name) { 
-                functionCalls.push({ name: part.functionCall.name, args: part.functionCall.args }); 
-            } 
-        }
-        return { text: response.text(), functionCalls: functionCalls.length > 0 ? functionCalls : undefined };
+        const model = this.ai.getGenerativeModel({
+            model: "gemini-1.5-flash",
+            systemInstruction: {
+                role: 'user',
+                parts: [{ text: `You are an assistant for a developer tool. Decide which function to call based on the user's request and your knowledge base. If no tool is appropriate, respond with text.\n\nKnowledge Base:\n${knowledgeBase}` }]
+            },
+            tools: [{ functionDeclarations }],
+        });
+
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        const functionCalls = response.functionCalls()?.map((call: FunctionCall) => ({ name: call.name, args: call.args }));
+        
+        return { text: response.text(), functionCalls: functionCalls && functionCalls.length > 0 ? functionCalls : undefined };
     } catch (error) {
         logError(error as Error, { prompt });
         throw error;
@@ -229,27 +224,15 @@ export class GeminiProvider implements IAiProvider {
    * @inheritdoc
    */
   async generateImage(prompt: string): Promise<string> {
-    const response = await this.ai.models.generateImages({
-        model: 'imagen-4.0-generate-001',
-        prompt: prompt,
-        config: { numberOfImages: 1, outputMimeType: 'image/png' },
-    });
-
-    const images = response.generatedImages;
-    if (!images || images.length === 0 || !images[0].image.imageBytes) {
-        throw new Error('Image generation failed to return an image.');
-    }
-    const base64ImageBytes: string = images[0].image.imageBytes;
-    return `data:image/png;base64,${base64ImageBytes}`;
+    logError(new Error("GeminiProvider.generateImage is not implemented."));
+    throw new Error("Direct image generation is not supported by this provider implementation.");
   }
 
   /**
    * @inheritdoc
    */
   async generateImageFromImageAndText(prompt: string, _base64Image: string, _mimeType: string): Promise<string> {
-    console.warn("Image-to-image generation is not fully supported by the current SDK implementation; using text prompt only.");
-    // When SDK supports image-to-image, the implementation will change here.
-    // For now, we fall back to text-to-image.
-    return this.generateImage(prompt);
+    logError(new Error("GeminiProvider.generateImageFromImageAndText is not implemented."));
+    throw new Error("Image-to-image generation is not supported by this provider implementation.");
   }
 }

@@ -77,7 +77,7 @@ export function initGoogleAuth(callback: (user: AppUser | null) => void) {
       (async () => {
           try {
               const isInitialized = await vaultService.isVaultInitialized();
-              if (isInitialized && !vaultService.isUnlocked()) {
+              if (isInitialized && !(await vaultService.isUnlocked())) {
                   throw new Error('VAULT_LOCKED');
               }
               
@@ -108,7 +108,7 @@ export function initGoogleAuth(callback: (user: AppUser | null) => void) {
       if (tokenResponse && tokenResponse.access_token) {
         try {
             const isInitialized = await vaultService.isVaultInitialized();
-            if (isInitialized && !vaultService.isUnlocked()) {
+            if (isInitialized && !(await vaultService.isUnlocked())) {
                 throw new Error("Sign-in successful, but the application's credential vault is locked. Please unlock the vault and try again.");
             }
 
