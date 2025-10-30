@@ -1,35 +1,35 @@
-/**
- * @file service.registry.ts
- * @description This file initializes and configures the InversifyJS dependency injection (DI) container.
- * It defines service identifiers and binds them to their concrete implementations, managing the application's
- * service lifecycle and dependencies in a centralized location. This is the core of the application's
- * modular architecture.
- *
- * @requires reflect-metadata - Must be imported once at the application's entry point.
- * @requires inversify - The DI container library.
- */
 import 'reflect-metadata';
 import { Container } from 'inversify';
 
-// Import service identifiers. These act as unique keys for services in the DI container.
-import { TYPES } from '../core/di/types';
+// Central registry for all injectable service identifiers.
+export const SERVICE_IDENTIFIER = {
+    // Core Services
+    EventBus: Symbol.for('EventBus'),
+    CommandBus: Symbol.for('CommandBus'),
+    ComputationService: Symbol.for('ComputationService'),
+    CachingService: Symbol.for('CachingService'),
+    
+    // AI Engine
+    AIEngineService: Symbol.for('AIEngineService'),
+    AiProviderFactory: Symbol.for('AiProviderFactory'),
 
-// Import interfaces and their concrete implementations for all major services.
-// Note: This registry assumes that the corresponding interface (e.g., IEventBus)
-// is exported from the same file as the service implementation.
+    // Modules
+    SecurityCore: Symbol.for('SecurityCore'),
+    WindowingManager: Symbol.for('WindowingManager'),
+    WorkspaceConnectorService: Symbol.for('WorkspaceConnectorService'),
+};
+
+// Import interfaces and their concrete implementations.
 import { IEventBus, EventBusService } from '../core/bus/event-bus.service';
-import { ICommandBus, CommandBusService } from '../core/command-bus/command-bus.service';
-import { IAIEngineService, AIEngineService } from './ai-engine/ai-engine.service';
+import { ICommandBus } from '../core/command-bus/types';
+import { CommandBusService } from '../core/command-bus/command-bus.service';
+import { IComputationService, ComputationService } from '../core/computation/computation.service';
+import { CachingService } from '../core/caching/caching.service';
+import { IAIEngine, AIEngine } from './ai-engine/ai-engine.service';
+import { ProviderFactory } from './ai-engine/providers/provider.factory';
 import { IWorkspaceConnectorService, WorkspaceConnectorService } from './workspace-connectors/workspace-connectors.service';
 import { WindowingManagerService } from './desktop-environment/windowing-manager.service';
 import { SecurityCoreService } from './security-core/security-core.service';
-import { IComputationService, ComputationService } from '../core/computation/computation.service';
-import { CachingService } from '../core/caching/caching.service';
-import { ProviderFactory } from './ai-engine/providers/provider.factory';
-import { ICachingService } from '../core/caching/types';
-import { IWindowingManager } from './desktop-environment/types';
-import { ISecurityCore } from './security-core/types';
-import { IProviderFactory } from './ai-engine/providers/iai-provider';
 
 /**
  * @constant container
@@ -39,30 +39,20 @@ import { IProviderFactory } from './ai-engine/providers/iai-provider';
 const container = new Container();
 
 // --- Service Bindings ---
-// Services are bound to their interfaces (when available) or concrete classes.
-// Most core services are singletons to ensure a single instance exists throughout the application lifecycle.
 
-container.bind<IEventBus>(TYPES.EventBus).to(EventBusService).inSingletonScope();
+// Core
+container.bind<IEventBus>(SERVICE_IDENTIFIER.EventBus).to(EventBusService).inSingletonScope();
+container.bind<ICommandBus>(SERVICE_IDENTIFIER.CommandBus).to(CommandBusService).inSingletonScope();
+container.bind<IComputationService>(SERVICE_IDENTIFIER.ComputationService).to(ComputationService).inSingletonScope();
+container.bind<CachingService>(SERVICE_IDENTIFIER.CachingService).to(CachingService).inSingletonScope();
 
-// Note: The identifier in TYPES is 'CommandHandler', but the service is a 'CommandBus'.
-// Binding the ICommandBus interface to the CommandHandler symbol to reconcile this.
-container.bind<ICommandBus>(TYPES.CommandHandler).to(CommandBusService).inSingletonScope();
+// AI Engine
+container.bind<IAIEngine>(SERVICE_IDENTIFIER.AIEngineService).to(AIEngine).inSingletonScope();
+container.bind<ProviderFactory>(SERVICE_IDENTIFIER.AiProviderFactory).to(ProviderFactory).inSingletonScope();
 
-container.bind<IAIEngineService>(TYPES.AIEngine).to(AIEngineService).inSingletonScope();
-container.bind<IWorkspaceConnectorService>(TYPES.WorkspaceConnectorService).to(WorkspaceConnectorService).inSingletonScope();
-
-// IWindowingManager is not exported from its service, so we bind the concrete class.
-container.bind<WindowingManagerService>(TYPES.WindowingManager).to(WindowingManagerService).inSingletonScope();
-
-// ISecurityCore is not exported from its service, so we bind the concrete class.
-container.bind<SecurityCoreService>(TYPES.SecurityCore).to(SecurityCoreService).inSingletonScope();
-
-container.bind<IComputationService>(TYPES.ComputationService).to(ComputationService).inSingletonScope();
-
-// ICachingService is not exported from its service, so we bind the concrete class.
-container.bind<CachingService>(TYPES.CachingService).to(CachingService).inSingletonScope();
-
-// IProviderFactory is not exported from its service, so we bind the concrete class.
-container.bind<ProviderFactory>(TYPES.AiProviderFactory).to(ProviderFactory).inSingletonScope();
+// Modules
+container.bind<SecurityCoreService>(SERVICE_IDENTIFIER.SecurityCore).to(SecurityCoreService).inSingletonScope();
+container.bind<WindowingManagerService>(SERVICE_IDENTIFIER.WindowingManager).to(WindowingManagerService).inSingletonScope();
+container.bind<IWorkspaceConnectorService>(SERVICE_IDENTIFIER.WorkspaceConnectorService).to(WorkspaceConnectorService).inSingletonScope();
 
 export { container };

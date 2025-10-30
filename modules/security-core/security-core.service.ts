@@ -22,6 +22,17 @@ import {
 } from './types';
 import { logError } from '../../services/telemetryService';
 
+// Module augmentation for AppEventMap to include 'vault:state-changed'
+// This is necessary because 'vault:state-changed' is published but not defined in the base AppEventMap.
+declare module '../../core/bus/event-bus.service' {
+  interface AppEventMap {
+    'vault:state-changed': {
+      isInitialized: boolean;
+      isUnlocked: boolean;
+    };
+  }
+}
+
 // Augmented interfaces to include a request ID for promise mapping
 interface SecurityCoreMessageWithId<T = any> extends SecurityCoreMessage<T> {
   requestId: string;
@@ -108,7 +119,8 @@ export class SecurityCoreService {
     if (!this.worker) {
       return Promise.reject(new Error('Security Core worker is not available.'));
     }
-    const requestId = crypto.randomUUID();
+    // `crypto` is assumed to be globally available (Web Crypto API in browser environments, including Workers)
+    const requestId = crypto.randomUUID(); 
     return new Promise<T>((resolve, reject) => {
       this.pendingRequests.set(requestId, { resolve, reject });
       this.worker!.postMessage({ requestId, command, payload } as SecurityCoreMessageWithId);
@@ -135,6 +147,7 @@ export class SecurityCoreService {
     if (this.status !== VaultStatus.UNINITIALIZED) {
       throw new Error("Vault is already initialized.");
     }
+    // `crypto` is assumed to be globally available
     const salt = crypto.getRandomValues(new Uint8Array(16));
     await saveVaultData('pbkdf2-salt', salt);
 

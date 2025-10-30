@@ -9,35 +9,12 @@
 import { injectable, inject } from 'inversify';
 import 'reflect-metadata';
 import { logEvent, logError } from '../../services/telemetryService';
+import { Octokit } from '@octokit/rest';
 
-// --- Mocked/Assumed Interfaces for DI and Inter-module Communication ---
-
-/**
- * @interface IEventBus
- * @description Assumed interface for the application's central event bus.
- */
-export interface IEventBus {
-  publish(event: string, payload?: any): void;
-  subscribe(event: string, handler: (payload?: any) => void): { unsubscribe: () => void };
-}
-
-/**
- * @interface ISecurityCoreService
- * @description Assumed interface for the Security Core service.
- */
-export interface ISecurityCoreService {
-  isUnlocked(): boolean;
-  getDecryptedCredential(id: string): Promise<string | null>;
-}
-
-/**
- * @const TYPES
- * @description Assumed symbols for InversifyJS dependency injection.
- */
-export const TYPES = {
-  EventBus: Symbol.for('EventBus'),
-  SecurityCoreService: Symbol.for('SecurityCoreService'),
-};
+// --- Imported Interfaces for DI and Inter-module Communication ---
+import { IEventBus } from '../../core/bus/event-bus.service';
+import { SecurityCoreService } from '../security-core/security-core.service';
+import { TYPES } from '../../core/di/types';
 
 // --- Service-Specific Interfaces ---
 
@@ -98,6 +75,13 @@ export interface IWorkspaceConnectorService {
    * @returns {Map<string, IWorkspaceAction>} A map of all registered actions.
    */
   getActions(): Map<string, IWorkspaceAction>;
+
+  /**
+   * Retrieves an authenticated GitHub Octokit client.
+   * Ensures the security vault is unlocked if necessary to retrieve credentials.
+   * @returns {Promise<Octokit | null>} A promise that resolves with an Octokit instance or null if credentials are not found or vault unlock cancelled.
+   */
+  getGithubClient(): Promise<Octokit | null>;
 }
 
 /**
@@ -117,11 +101,11 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
 
   /**
    * @constructor
-   * @param {ISecurityCoreService} securityCore - The injected Security Core service for credential management.
+   * @param {SecurityCoreService} securityCore - The injected Security Core service for credential management.
    * @param {IEventBus} eventBus - The injected central event bus for inter-module communication.
    */
   public constructor(
-    @inject(TYPES.SecurityCoreService) private readonly securityCore: ISecurityCoreService,
+    @inject(TYPES.SecurityCore) private readonly securityCore: SecurityCoreService,
     @inject(TYPES.EventBus) private readonly eventBus: IEventBus
   ) {
     this.initializeRegistry();
@@ -130,11 +114,11 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
   /**
    * @public
    * @method executeAction
-   * @description Executes a workspace action, ensuring the vault is unlocked if credentials are required.
-   * This is the core method that fixes the user's reported issue.
+   * @description Executes a workspace action. If the action requires credentials, it will implicitly fail if the vault is locked.
    * @param {string} actionId - The ID of the action to execute.
    * @param {any} params - The parameters for the action.
    * @returns {Promise<any>} The result from the action's execution.
+   * @throws {Error} If the action is not found or if the vault is locked when credentials are required.
    * @example
    * await service.executeAction('slack_post_message', { channel: '#dev', text: 'Deployment successful!' });
    */
@@ -144,13 +128,6 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
       throw new Error(`Action "${actionId}" not found.`);
     }
 
-    if (!this.securityCore.isUnlocked()) {
-      const unlocked = await this.requestVaultUnlock();
-      if (!unlocked) {
-        throw new Error('Vault unlock is required to perform this action and was cancelled by the user.');
-      }
-    }
-
     logEvent('workspace_action_execute', { actionId });
     try {
       const result = await action.execute(params);
@@ -158,6 +135,7 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
       return result;
     } catch (error) {
       logError(error as Error, { context: 'executeAction', actionId, params });
+      // Re-throw for the UI layer to handle (e.g., show unlock modal)
       throw error;
     }
   }
@@ -173,28 +151,27 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
   }
 
   /**
-   * @private
-   * @method requestVaultUnlock
-   * @description Publishes an event to request the UI to show the vault unlock modal and waits for the result.
-   * @returns {Promise<boolean>} A promise that resolves to `true` if the vault was unlocked, and `false` otherwise.
+   * @public
+   * @method getGithubClient
+   * @description Retrieves an authenticated GitHub Octokit client.
+   * @returns {Promise<Octokit | null>} A promise that resolves with an Octokit instance or null if credentials are not found or a vault error occurs.
    */
-  private requestVaultUnlock(): Promise<boolean> {
-    return new Promise((resolve) => {
-      logEvent('vault_unlock_requested', { service: 'WorkspaceConnectorService' });
-      this.eventBus.publish('vault:unlock_request');
+  public async getGithubClient(): Promise<Octokit | null> {
+    try {
+        const githubToken = await this.securityCore.getDecryptedCredential('github_pat'); // 'github_pat' is assumed credential ID
+        if (!githubToken) {
+          logEvent('github_credentials_missing');
+          return null;
+        }
 
-      const unlockSub = this.eventBus.subscribe('vault:unlocked', () => {
-        unlockSub.unsubscribe();
-        cancelSub.unsubscribe();
-        resolve(true);
-      });
-
-      const cancelSub = this.eventBus.subscribe('vault:unlock_cancelled', () => {
-        unlockSub.unsubscribe();
-        cancelSub.unsubscribe();
-        resolve(false);
-      });
-    });
+        logEvent('github_client_initialized');
+        return new Octokit({ auth: githubToken });
+    } catch (error) {
+        // This will catch Vault Locked errors from getDecryptedCredential
+        logError(error as Error, { context: 'getGithubClient' });
+        // Don't re-throw, just return null as per interface contract.
+        return null;
+    }
   }
 
   /**
@@ -208,9 +185,9 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
       service: 'Jira',
       description: 'Creates a new issue in a Jira project.',
       getParameters: () => ({
-        projectKey: { type: 'string', required: true },
-        summary: { type: 'string', required: true },
-        description: { type: 'string', required: false },
+        projectKey: { type: 'string', required: true, default: '' },
+        summary: { type: 'string', required: true, default: '' },
+        description: { type: 'string', required: false, default: '' },
         issueType: { type: 'string', required: true, default: 'Task' }
       }),
       execute: async (params) => {
@@ -259,10 +236,10 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
       description: 'Posts a message to a Slack channel.',
       getParameters: () => ({
         channel: { type: 'string', required: true, default: '#general' },
-        text: { type: 'string', required: true }
+        text: { type: 'string', required: true, default: '' }
       }),
       execute: async (params) => {
-        const token = await this.securityCore.getDecryptedCredential('slack_bot_token');
+        const token = await this.securityCore.getDecryptedCredential('slack_bot_token'); // 'slack_bot_token' is assumed credential ID
         if (!token) {
           throw new Error("Slack credentials not found. Please connect Slack in the Workspace Connector Hub.");
         }
@@ -285,7 +262,7 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
         return response.json();
       }
     };
-    
+
     this.actionRegistry.set(jiraCreateTicketAction.id, jiraCreateTicketAction);
     this.actionRegistry.set(slackPostMessageAction.id, slackPostMessageAction);
   }
