@@ -4,6 +4,9 @@ import { startMockServer, stopMockServer, setMockRoutes, isMockServerRunning } f
 import { saveMockCollection, getAllMockCollections } from '../../services/mocking/db.ts';
 import { ServerStackIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const exampleSchema = "a user with an id, name, email, and a nested address object containing a city and country";
 
@@ -18,6 +21,11 @@ export const ApiMockGenerator: React.FC = () => {
     const [isServerRunning, setIsServerRunning] = useState(isMockServerRunning());
     const [routes] = useState([{ path: '/api/users', method: 'GET' }]);
 
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
     useEffect(() => {
         const loadCollections = async () => {
             const storedCollections = await getAllMockCollections();
@@ -26,30 +34,10 @@ export const ApiMockGenerator: React.FC = () => {
         loadCollections();
     }, []);
 
-    const handleGenerate = async () => {
-        if (!schema.trim() || !collectionName.trim()) {
-            setError('Schema description and collection name are required.');
-            return;
-        }
-        setIsLoading(true);
-        setError('');
-        try {
-            const data = await generateMockData(schema, count);
-            setGeneratedData(data);
-            const collectionId = collectionName.toLowerCase().replace(/\s/g, '-');
-            await saveMockCollection({ id: collectionId, schemaDescription: schema, data });
-            setCollections(await getAllMockCollections());
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to generate data.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const updateRoutes = useCallback(() => {
+    const updateRoutes = useCallback((currentCollections: any[]) => {
         const mockRoutes = routes.map(route => {
             // A simple implementation: find first matching collection for path
-            const matchingCollection = collections.find(c => route.path.includes(c.id));
+            const matchingCollection = currentCollections.find(c => route.path.includes(c.id));
             return {
                 ...route,
                 response: {
@@ -59,9 +47,52 @@ export const ApiMockGenerator: React.FC = () => {
             };
         });
         setMockRoutes(mockRoutes as any);
-    }, [routes, collections]);
+    }, [routes]);
 
-    const handleServerToggle = async () => {
+    const handleGenerate = useCallback(async () => {
+        if (!schema.trim() || !collectionName.trim()) {
+            setError('Schema description and collection name are required.');
+            return;
+        }
+        setIsLoading(true);
+        setError('');
+        try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
+            const data = await generateMockData(schema, count);
+            setGeneratedData(data);
+            const collectionId = collectionName.toLowerCase().replace(/\s/g, '-');
+            await saveMockCollection({ id: collectionId, schemaDescription: schema, data });
+            const allCollections = await getAllMockCollections();
+            setCollections(allCollections);
+            if (isServerRunning) {
+                updateRoutes(allCollections);
+            }
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'Failed to generate data.';
+            setError(errorMessage);
+            addNotification(errorMessage, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    }, [schema, count, collectionName, vaultState, requestCreation, requestUnlock, addNotification, isServerRunning, updateRoutes]);
+
+    const handleServerToggle = useCallback(async () => {
         if (isServerRunning) {
             await stopMockServer();
             setIsServerRunning(false);
@@ -69,18 +100,20 @@ export const ApiMockGenerator: React.FC = () => {
             try {
                 await startMockServer();
                 setIsServerRunning(true);
-                updateRoutes();
+                updateRoutes(collections);
             } catch (err) {
-                setError(err instanceof Error ? err.message : 'Could not start server.');
+                const errorMessage = err instanceof Error ? err.message : 'Could not start server.';
+                setError(errorMessage);
+                addNotification(errorMessage, 'error');
             }
         }
-    };
+    }, [isServerRunning, collections, updateRoutes, addNotification]);
 
     useEffect(() => {
         if (isServerRunning) {
-            updateRoutes();
+            updateRoutes(collections);
         }
-    }, [isServerRunning, updateRoutes]);
+    }, [isServerRunning, collections, updateRoutes]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">

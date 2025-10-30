@@ -3,7 +3,6 @@ import { transferCodeStyleStream } from '../../services/index.ts';
 import { SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { MarkdownRenderer } from '../shared/index.tsx';
-import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
 
@@ -19,55 +18,45 @@ export const AiStyleTransfer: React.FC = () => {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
 
-    const { state } = useGlobalState();
-    const { vaultState } = state;
-    const { requestUnlock, requestCreation } = useVaultModal();
+    const { requestUnlock } = useVaultModal();
     const { addNotification } = useNotification();
 
-    const withVault = useCallback(async (callback: () => Promise<void>) => {
-        if (!vaultState.isInitialized) {
-            const created = await requestCreation();
-            if (!created) {
-                addNotification('Vault setup is required to use AI features.', 'error');
-                return;
-            }
-        }
-        if (!vaultState.isUnlocked) {
-            const unlocked = await requestUnlock();
-            if (!unlocked) {
-                addNotification('Vault must be unlocked to use AI features.', 'info');
-                return;
-            }
-        }
-        await callback();
-    }, [vaultState, requestCreation, requestUnlock, addNotification]);
-
-    const handleGenerate = useCallback(async () => {
+    const handleGenerate = useCallback(async (isRetry: boolean = false) => {
         if (!inputCode.trim() || !styleGuide.trim()) {
             setError('Please provide both code and a style guide.');
             return;
         }
         
-        await withVault(async () => {
-            setIsLoading(true);
-            setError('');
+        setIsLoading(true);
+        setError('');
+        if (!isRetry) {
             setOutputCode('');
-            try {
-                const stream = transferCodeStyleStream({ code: inputCode, styleGuide });
-                let fullResponse = '';
-                for await (const chunk of stream) {
-                    fullResponse += chunk;
-                    setOutputCode(fullResponse);
-                }
-            } catch (err) {
-                const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-                setError(`Failed to transfer style: ${errorMessage}`);
-                addNotification(errorMessage, 'error');
-            } finally {
-                setIsLoading(false);
+        }
+
+        try {
+            const stream = transferCodeStyleStream({ code: inputCode, styleGuide });
+            let fullResponse = '';
+            for await (const chunk of stream) {
+                fullResponse += chunk;
+                setOutputCode(fullResponse);
             }
-        });
-    }, [inputCode, styleGuide, withVault, addNotification]);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            if (errorMessage.includes('Vault is locked') || errorMessage.includes('API key not found')) {
+                addNotification('Vault is locked. Please unlock to proceed.', 'info');
+                const unlocked = await requestUnlock();
+                if (unlocked) {
+                    handleGenerate(true); // Retry the operation
+                    return; // Exit to avoid setting loading to false prematurely
+                }
+            } else {
+                 setError(`Failed to transfer style: ${errorMessage}`);
+                addNotification(errorMessage, 'error');
+            }
+        } finally {
+            setIsLoading(false);
+        }
+    }, [inputCode, styleGuide, addNotification, requestUnlock]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
@@ -99,7 +88,7 @@ export const AiStyleTransfer: React.FC = () => {
                 </div>
                  <div className="flex-shrink-0">
                     <button
-                        onClick={handleGenerate}
+                        onClick={() => handleGenerate()}
                         disabled={isLoading}
                         className="btn-primary w-full max-w-xs mx-auto flex items-center justify-center px-6 py-3"
                     >
