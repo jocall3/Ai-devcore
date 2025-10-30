@@ -1,4 +1,4 @@
-```typescript
+
 /**
  * @fileoverview Defines the AIEngine, the primary entry point for all AI-related
  * operations. It acts as a facade, delegating computationally intensive tasks to a
@@ -207,4 +207,3 @@ export class AIEngine implements IAIEngine {
     return this.computationService.execute('generateDockerfile', framework);
   }
 }
-```
