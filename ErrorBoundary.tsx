@@ -1,6 +1,6 @@
 import React from 'react';
 import { logError } from './services/telemetryService.ts';
-import { debugErrorStream } from './services/aiService.ts';
+import { streamContent } from './services/aiService.ts';
 import { SparklesIcon } from './components/icons.tsx';
 import { MarkdownRenderer, LoadingSpinner } from './components/shared/index.tsx';
 
@@ -39,22 +39,20 @@ export class ErrorBoundary extends React.Component<Props, State> {
   handleAskAi = async () => {
     if (!this.state.error) return;
 
-    // FIX: Add `this` keyword to `setState`
     this.setState({ isAiLoading: true, aiHelp: '' });
     try {
-        const stream = debugErrorStream(this.state.error);
+        const prompt = `An error occurred in my React application. Please explain what it means and suggest a fix.\n\nError Message: ${this.state.error.message}\n\nStack Trace:\n${this.state.error.stack}`;
+        const systemInstruction = "You are an expert React developer and debugging assistant. Provide a clear, concise explanation of the error and a possible solution in markdown format.";
+        const stream = streamContent(prompt, systemInstruction, 0.5);
         let fullResponse = '';
         for await (const chunk of stream) {
             fullResponse += chunk;
-            // FIX: Add `this` keyword to `setState`
             this.setState({ aiHelp: fullResponse });
         }
     } catch (e) {
-        // FIX: Add `this` keyword to `setState`
         this.setState({ aiHelp: 'Sorry, the AI assistant could not be reached.' });
         logError(e as Error, { context: 'AI Error Debugging' });
     } finally {
-        // FIX: Add `this` keyword to `setState`
         this.setState({ isAiLoading: false });
     }
   };
@@ -104,7 +102,6 @@ export class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    // FIX: Add `this` keyword to `props`
     return this.props.children;
   }
 }

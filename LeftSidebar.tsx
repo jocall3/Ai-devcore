@@ -1,10 +1,10 @@
 import React from 'react';
-import type { ViewType, SidebarItem } from '../types.ts';
-import { useGlobalState } from '../contexts/GlobalStateContext.tsx';
-import { signOutUser } from '../services/googleAuthService.ts';
-import { ArrowLeftOnRectangleIcon, LockClosedIcon } from './icons.tsx';
-import { useVaultModal } from '../contexts/VaultModalContext.tsx';
-import { useNotification } from '../contexts/NotificationContext.tsx';
+import type { ViewType, SidebarItem } from '../types';
+import { useGlobalState } from '../contexts/GlobalStateContext';
+import { signOutUser } from '../services/googleAuthService';
+import { ArrowLeftOnRectangleIcon, LockClosedIcon } from './icons';
+import { useVaultModal } from '../contexts/VaultModalContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface LeftSidebarProps {
   items: SidebarItem[];

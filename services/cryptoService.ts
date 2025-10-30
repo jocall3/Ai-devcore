@@ -1,17 +1,14 @@
 /**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-/**
  * @file This service acts as the main-thread interface to the Security Core Web Worker.
  * It abstracts away the message-passing mechanism and provides a clean, promise-based API
  * for all cryptographic operations. The session key is managed exclusively within the
  * worker and is never exposed to the main thread.
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
  */
 
-import { logError } from './telemetryService';
-import type { EncryptedData } from '../types';
+import { logError } from './telemetryService.ts';
+import type { EncryptedData, VaultCanary } from '../types.ts';
 
 /**
  * Represents the structure of a message sent to the Security Core worker.
@@ -28,9 +25,10 @@ interface WorkerRequest<T = any> {
  * @template T - The type of the data in a successful response.
  */
 interface WorkerResponse<T = any> {
-  requestId: string;
-  success: boolean;
-  data?: T;
+  command: string;
+  requestId?: string;
+  success?: boolean;
+  payload?: T;
   error?: string;
 }
 
@@ -40,20 +38,8 @@ const pendingRequests = new Map<string, { resolve: (value: any) => void, reject:
 /**
  * Initializes the Security Core Web Worker and sets up the message listener.
  * This should be called once when the application starts.
- *
  * @example
- * import { initSecurityCore } from './services/cryptoService';
- *
- * function main() {
- *   try {
- *     initSecurityCore();
- *     console.log('Security Core initialized.');
- *   } catch (error) {
- *     console.error('Failed to initialize Security Core:', error);
- *   }
- * }
- *
- * main();
+ * initSecurityCore();
  */
 export function initSecurityCore(): void {
   if (worker) {
@@ -62,25 +48,31 @@ export function initSecurityCore(): void {
   }
 
   try {
-    worker = new Worker(new URL('../workers/securityCore.worker.ts', import.meta.url), { type: 'module' });
+    // The worker path is relative to this file's location after build.
+    worker = new Worker(new URL('../modules/security-core/security-core.worker.ts', import.meta.url), { type: 'module' });
 
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-      const { requestId, success, data, error } = event.data;
-      const request = pendingRequests.get(requestId);
-
-      if (request) {
-        if (success) {
-          request.resolve(data);
-        } else {
-          request.reject(new Error(error || 'An unknown error occurred in the Security Core Worker.'));
+      const { requestId, command, success, payload, error } = event.data;
+      if (requestId) {
+        const request = pendingRequests.get(requestId);
+        if (request) {
+          if (success) {
+            request.resolve(payload);
+          } else {
+            request.reject(new Error(error || `An unknown error occurred for command ${command}.`));
+          }
+          pendingRequests.delete(requestId);
         }
-        pendingRequests.delete(requestId);
+      } else {
+        // Handle events without a specific request ID, like 'VAULT_LOCKED'
+        console.log(`Security Core Event: ${command}`, payload);
       }
     };
 
     worker.onerror = (error) => {
       logError(error as any, { context: 'SecurityCoreWorker' });
-      console.error('An unhandled error occurred in the Security Core Worker:', error);
+      console.error('An unhandled error occurred in the Security Core Worker:', error.message);
+      // Reject all pending requests as the worker is in an unrecoverable state.
       pendingRequests.forEach((request) => {
         request.reject(new Error('The Security Core Worker crashed.'));
       });
@@ -101,7 +93,7 @@ export function initSecurityCore(): void {
  * @returns {Promise<T>} A promise that resolves with the data from the worker's response.
  * @private
  */
-function postMessageToWorker<T>(command: string, payload: any = {}): Promise<T> {
+function postCommandToWorker<T>(command: string, payload: any = {}): Promise<T> {
   if (!worker) {
     return Promise.reject(new Error('Security Core Worker is not initialized. Please call initSecurityCore() first.'));
   }
@@ -116,76 +108,59 @@ function postMessageToWorker<T>(command: string, payload: any = {}): Promise<T> 
 }
 
 /**
- * Generates a cryptographically secure random salt within the worker.
- * @returns {Promise<ArrayBuffer>} A promise that resolves with the new salt.
- * @example
- * const salt = await generateSalt();
+ * Generates a cryptographically secure random salt on the main thread.
+ * This is a safe operation to perform on the main thread and is needed before vault initialization.
+ * @returns {ArrayBuffer} A new 16-byte salt.
  */
-export const generateSalt = (): Promise<ArrayBuffer> => {
-  return postMessageToWorker<ArrayBuffer>('generate-salt');
+export const generateSalt = (): ArrayBuffer => {
+  return window.crypto.getRandomValues(new Uint8Array(16)).buffer;
 };
 
 /**
- * Instructs the worker to derive a key from a password and salt, then caches it in the worker's memory.
- * @param {string} password - The user's master password.
- * @param {ArrayBuffer} salt - The salt to use for key derivation.
- * @returns {Promise<boolean>} A promise that resolves to true on success.
- * @example
- * const salt = await getVaultData('pbkdf2-salt');
- * if (salt) {
- *   await deriveAndCacheKey('my-secret-password', salt);
- * }
+ * Instructs the worker to initialize a new vault with a master password and salt.
+ * @param {string} masterPassword - The user's master password.
+ * @param {ArrayBuffer} salt - The newly generated salt.
+ * @returns {Promise<{ canary: VaultCanary }>} A promise that resolves with the encrypted canary for verification.
  */
-export const deriveAndCacheKey = (password: string, salt: ArrayBuffer): Promise<boolean> => {
-  return postMessageToWorker<boolean>('derive-and-cache-key', { password, salt });
+export const initializeVault = (masterPassword: string, salt: ArrayBuffer): Promise<{ canary: VaultCanary }> => {
+  return postCommandToWorker('INIT_VAULT', { masterPassword, salt });
 };
 
 /**
- * Encrypts a plaintext string using the worker's cached session key.
- * @param {string} plaintext - The data to encrypt.
- * @returns {Promise<Omit<EncryptedData, 'id'>>} A promise that resolves with the encrypted data structure, including ciphertext and iv.
- * @example
- * const { ciphertext, iv } = await encrypt('my-secret-api-key');
- * // Now you can store the result in IndexedDB.
+ * Instructs the worker to unlock the vault using the master password, salt, and canary.
+ * The worker will derive the key, attempt to decrypt the canary, and store the key in its memory on success.
+ * @param {string} masterPassword - The user's master password.
+ * @param {ArrayBuffer} salt - The stored salt for the vault.
+ * @param {VaultCanary} canary - The encrypted canary for password verification.
+ * @returns {Promise<void>} A promise that resolves on successful unlock.
  */
-export const encrypt = (plaintext: string): Promise<Omit<EncryptedData, 'id'>> => {
-    return postMessageToWorker<{ ciphertext: ArrayBuffer, iv: Uint8Array }>('encrypt', { plaintext });
-};
-
-/**
- * Decrypts data using the worker's cached session key.
- * @param {Omit<EncryptedData, 'id'>} data - The encrypted data object containing ciphertext and iv.
- * @returns {Promise<string>} A promise that resolves with the decrypted plaintext.
- * @example
- * const encryptedData = await getEncryptedToken('github_pat');
- * if (encryptedData) {
- *   const { id, ...payload } = encryptedData;
- *   const plaintext = await decrypt(payload);
- *   console.log(plaintext);
- * }
- */
-export const decrypt = (data: Omit<EncryptedData, 'id'>): Promise<string> => {
-    return postMessageToWorker<string>('decrypt', { ciphertext: data.ciphertext, iv: data.iv });
+export const unlockVault = (masterPassword: string, salt: ArrayBuffer, canary: VaultCanary): Promise<void> => {
+  return postCommandToWorker('UNLOCK_VAULT', { masterPassword, salt, canary });
 };
 
 /**
  * Instructs the worker to securely discard the cached session key, effectively locking the vault.
- * @returns {Promise<boolean>} A promise that resolves to true when the key is discarded.
- * @example
- * await lock();
+ * @returns {Promise<void>} A promise that resolves when the vault is locked.
  */
-export const lock = (): Promise<boolean> => {
-  return postMessageToWorker<boolean>('lock');
+export const lockVault = (): Promise<void> => {
+  return postCommandToWorker('LOCK_VAULT');
 };
 
 /**
- * Checks if the worker currently holds a session key (i.e., if the vault is unlocked).
- * @returns {Promise<boolean>} A promise that resolves to true if the vault is unlocked, false otherwise.
- * @example
- * if (await isUnlocked()) {
- *   // Proceed with operations
- * }
+ * Encrypts a plaintext string using the worker's cached session key.
+ * @param {string} id - A unique identifier for the credential being encrypted.
+ * @param {string} plaintext - The data to encrypt.
+ * @returns {Promise<EncryptedData>} A promise that resolves with the encrypted data structure, including id, ciphertext, and iv.
  */
-export const isUnlocked = (): Promise<boolean> => {
-  return postMessageToWorker<boolean>('is-unlocked');
+export const encrypt = (id: string, plaintext: string): Promise<EncryptedData> => {
+  return postCommandToWorker<EncryptedData>('ENCRYPT', { id, plaintext });
+};
+
+/**
+ * Decrypts data using the worker's cached session key.
+ * @param {EncryptedData} data - The encrypted data object to decrypt.
+ * @returns {Promise<{ id: string; plaintext: string }>} A promise that resolves with the original ID and decrypted plaintext.
+ */
+export const decrypt = (data: EncryptedData): Promise<{ id: string; plaintext: string }> => {
+  return postCommandToWorker<{ id: string; plaintext: string }>('DECRYPT', data);
 };
