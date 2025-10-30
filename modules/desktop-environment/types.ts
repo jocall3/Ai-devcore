@@ -40,31 +40,31 @@ export interface Feature {
    * @type {FeatureId}
    */
   id: FeatureId;
-  
+
   /**
    * @description The display name of the feature.
    * @type {string}
    */
   name: string;
-  
+
   /**
    * @description A short description of what the feature does.
    * @type {string}
    */
   description: string;
-  
+
   /**
    * @description The React node to use as the feature's icon.
    * @type {React.ReactNode}
    */
   icon: React.ReactNode;
-  
+
   /**
    * @description The category the feature belongs to.
    * @type {FeatureCategory}
    */
   category: FeatureCategory;
-  
+
   /**
    * @description The lazy-loaded React component that renders the feature's UI.
    * @type {React.FC<any>}
@@ -108,19 +108,19 @@ export interface WindowDimensions {
    * @type {number}
    */
   x: number;
-  
+
   /**
    * @description The vertical position from the top edge of the viewport.
    * @type {number}
    */
   y: number;
-  
+
   /**
    * @description The width of the window.
    * @type {number}
    */
   width: number;
-  
+
   /**
    * @description The height of the window.
    * @type {number}
@@ -211,7 +211,7 @@ export interface AppEvent<T extends string, P> {
    * @type {T}
    */
   type: T;
-  
+
   /**
    * @description The data payload associated with the event.
    * @type {P}
