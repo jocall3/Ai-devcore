@@ -50,7 +50,7 @@ export const NetworkVisualizer: React.FC = () => {
     };
 
     const SortableHeader: React.FC<{ skey: SortKey, label: string; className?: string }> = ({ skey, label, className }) => (
-        <th onClick={() => handleSort(skey)} className={`p-2 text-left cursor-pointer hover:bg-gray-100 ${className}`}>
+        <th onClick={() => handleSort(skey)} className={`p-2 text-left cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700 ${className}`}>
             {label} {sortKey === skey && (sortDirection === 'asc' ? '▲' : '▼')}
         </th>
     );
@@ -72,13 +72,13 @@ export const NetworkVisualizer: React.FC = () => {
                         <SortableHeader skey="transferSize" label="Size" className="w-1/5"/>
                         <SortableHeader skey="duration" label="Time / Waterfall" className="w-1/5"/>
                     </tr></thead>
-                    <tbody>{sortedRequests.map((req, i) => (<tr key={i} className="border-b border-border hover:bg-gray-50">
+                    <tbody>{sortedRequests.map((req, i) => (<tr key={i} className="border-b border-border hover:bg-gray-50 dark:hover:bg-slate-700/50">
                         <td className="p-2 text-primary truncate" title={req.name}>{req.name.split('/').pop()}</td>
                         <td className="p-2">{req.initiatorType}</td>
                         <td className="p-2">{formatBytes(req.transferSize)}</td>
                         <td className="p-2"><div className="flex items-center">
                             <span className="w-12">{req.duration.toFixed(0)}ms</span>
-                            <div className="flex-grow h-4 bg-gray-200 rounded overflow-hidden">
+                            <div className="flex-grow h-4 bg-gray-200 dark:bg-slate-700 rounded overflow-hidden">
                                 <div className="h-4 bg-primary rounded" style={{ marginLeft: `${(req.startTime / totalDuration) * 100}%`, width: `${(req.duration / totalDuration) * 100}%` }} title={`Start: ${req.startTime.toFixed(0)}ms`}></div>
                             </div>
                         </div></td>

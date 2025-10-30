@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { CodeBracketSquareIcon } from '../icons.tsx';
+import { CodeBracketSquareIcon } from '@/components/icons.tsx';
 
 interface MetaData {
     title: string;
