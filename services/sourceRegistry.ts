@@ -1,4 +1,4 @@
-```typescript
+
 /**
  * SERVICE_IDENTIFIER is a collection of unique string constants used for dependency injection.
  * These identifiers help in mapping interfaces to their concrete implementations within an
@@ -36,4 +36,3 @@ const SERVICE_IDENTIFIER = {
 };
 
 export { SERVICE_IDENTIFIER };
-```
