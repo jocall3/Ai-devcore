@@ -1,8 +1,10 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { transcribeAudioToCodeStream, blobToBase64 } from '../../services/index.ts';
+import { streamContent, blobToBase64 } from '../../services/index.ts';
 import { MicrophoneIcon } from '../icons.tsx';
-import { LoadingSpinner } from '../shared/index.tsx';
-import { MarkdownRenderer } from '../shared/index.tsx';
+import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 
 export const AudioToCode: React.FC = () => {
     const [isRecording, setIsRecording] = useState(false);
@@ -11,6 +13,11 @@ export const AudioToCode: React.FC = () => {
     const [error, setError] = useState('');
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
+
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
 
     const handleStartRecording = async () => {
         setError('');
@@ -21,7 +28,7 @@ export const AudioToCode: React.FC = () => {
         }
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorderRef.current = new MediaRecorder(stream);
+            mediaRecorderRef.current = new MediaRecorder(stream, { mimeType: 'audio/webm' });
             mediaRecorderRef.current.ondataavailable = event => {
                 audioChunksRef.current.push(event.data);
             };
@@ -47,11 +54,38 @@ export const AudioToCode: React.FC = () => {
             setIsLoading(false);
             return;
         }
+
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (!created) {
+                addNotification('Vault setup is required for AI features.', 'error');
+                setIsLoading(false);
+                return;
+            }
+        }
+        if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (!unlocked) {
+                addNotification('Vault must be unlocked for AI features.', 'info');
+                setIsLoading(false);
+                return;
+            }
+        }
+        
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         audioChunksRef.current = [];
         try {
             const base64Audio = await blobToBase64(audioBlob);
-            const stream = transcribeAudioToCodeStream(base64Audio, 'audio/webm');
+            
+            const prompt = {
+                parts: [
+                    { text: "Generate a code snippet based on the following audio description. The code should be complete and runnable if possible. Output only the code in a markdown block." },
+                    { inlineData: { mimeType: 'audio/webm', data: base64Audio } }
+                ]
+            };
+            const systemInstruction = "You are an expert programmer that writes code based on voice instructions. You only output code, no explanations.";
+            const stream = streamContent(prompt, systemInstruction, 0.5);
+
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;
@@ -60,10 +94,11 @@ export const AudioToCode: React.FC = () => {
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
             setError(`Failed to transcribe audio: ${errorMessage}`);
+            addNotification(`Transcription failed: ${errorMessage}`, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">

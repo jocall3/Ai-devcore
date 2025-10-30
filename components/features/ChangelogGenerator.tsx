@@ -1,8 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { generateChangelogFromLogStream } from '../../services/aiService.ts';
+import { generateChangelogFromLogStream } from '../../services/index.ts';
 import { GitBranchIcon } from '../icons.tsx';
-import { LoadingSpinner } from '../shared/index.tsx';
-import { MarkdownRenderer } from '../shared/index.tsx';
+import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 
 const exampleLog = `commit 3a4b5c...
 Author: Dev One <dev.one@example.com>
@@ -23,6 +25,11 @@ export const ChangelogGenerator: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
     const handleGenerate = useCallback(async () => {
         if (!log.trim()) {
             setError('Please paste your git log output.');
@@ -31,7 +38,25 @@ export const ChangelogGenerator: React.FC = () => {
         setIsLoading(true);
         setError('');
         setChangelog('');
+
         try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
             const stream = generateChangelogFromLogStream(log);
             let fullResponse = '';
             for await (const chunk of stream) {
@@ -39,11 +64,13 @@ export const ChangelogGenerator: React.FC = () => {
                 setChangelog(fullResponse);
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            setError(errorMessage);
+            addNotification(errorMessage, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [log]);
+    }, [log, vaultState, requestCreation, requestUnlock, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
@@ -75,7 +102,7 @@ export const ChangelogGenerator: React.FC = () => {
                         {isLoading && !changelog && <div className="flex items-center justify-center h-full"><LoadingSpinner /></div>}
                         {error && <p className="text-red-500">{error}</p>}
                         {changelog && <MarkdownRenderer content={changelog} />}
-                        {!isLoading && changelog && <button onClick={() => navigator.clipboard.writeText(changelog)} className="absolute top-2 right-2 px-2 py-1 bg-gray-100 text-xs rounded-md hover:bg-gray-200">Copy</button>}
+                        {!isLoading && changelog && <button onClick={() => navigator.clipboard.writeText(changelog)} className="absolute top-2 right-2 px-2 py-1 bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded-md text-xs">Copy</button>}
                     </div>
                 </div>
             </div>

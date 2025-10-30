@@ -1,5 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import { formatCodeStream } from '../../services/index.ts';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { CodeBracketSquareIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { MarkdownRenderer } from '../shared/index.tsx';
@@ -18,6 +21,11 @@ export const CodeFormatter: React.FC = () => {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
 
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
     const handleFormat = useCallback(async () => {
         if (!inputCode.trim()) {
             setError('Please enter some code to format.');
@@ -26,7 +34,25 @@ export const CodeFormatter: React.FC = () => {
         setIsLoading(true);
         setError('');
         setFormattedCode('');
+        
         try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
             const stream = formatCodeStream(inputCode);
             let fullResponse = '';
             for await (const chunk of stream) {
@@ -36,10 +62,11 @@ export const CodeFormatter: React.FC = () => {
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
             setError(`Failed to format code: ${errorMessage}`);
+            addNotification(errorMessage, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [inputCode]);
+    }, [inputCode, vaultState, requestCreation, requestUnlock, addNotification]);
     
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
