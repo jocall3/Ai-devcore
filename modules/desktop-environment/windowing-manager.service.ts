@@ -1,3 +1,4 @@
+```typescript
 /**
  * @file Defines the WindowingManager service responsible for window state management.
  * @license SPDX-License-Identifier: Apache-2.0
@@ -9,18 +10,7 @@ import {
   type WindowContext,
   type WindowPosition
 } from './window.state-machine';
-
-// --- Placeholder Interfaces (to be replaced by actual implementations) ---
-
-/**
- * @interface IEventBus
- * @description Represents the central asynchronous event bus for inter-module communication.
- * This is a placeholder and should be replaced with the actual application's event bus implementation.
- */
-export interface IEventBus {
-  publish<T>(topic: string, data?: T): void;
-  subscribe<T>(topic: string, handler: (data: T) => void): () => void;
-}
+import { IEventBus } from '../../core/bus/event-bus.service'; // Import the actual IEventBus
 
 // --- Type Definitions ---
 
@@ -111,6 +101,8 @@ export class WindowingManagerService {
 
     this.focusWindow(newWindowId);
     
+    // Using explicit event names here. If IEventBus expects a specific AppEventMap,
+    // these strings should be defined there or passed through a strongly-typed enum.
     this.eventBus.publish('window:opened', { windowId: newWindowId, featureId });
     this._broadcastWindowState();
 
@@ -270,3 +262,4 @@ export class WindowingManagerService {
     return undefined;
   }
 }
+```
