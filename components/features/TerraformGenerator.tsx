@@ -1,7 +1,20 @@
 import React, { useState, useCallback } from 'react';
-import { generateTerraformConfig } from '../../services/index.ts';
+import { aiService, ICommand, IAiProvider } from '../../services/index.ts';
 import { CpuChipIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
+
+class GenerateTerraformConfigCommand implements ICommand<string> {
+    constructor(private cloud: 'aws' | 'gcp', private description: string, private context: string) {}
+
+    execute(provider: IAiProvider): Promise<string> {
+        const prompt = `You are an expert in Infrastructure as Code. Generate a Terraform configuration file for ${this.cloud}. The configuration should do the following: ${this.description}. Additional context: ${this.context}. Respond only with the HCL code inside a markdown block.`;
+        const systemInstruction = "You are a Terraform expert generating HCL code.";
+        return provider.generateContent(prompt, systemInstruction, 0.2);
+    }
+}
 
 export const TerraformGenerator: React.FC = () => {
     const [description, setDescription] = useState('An S3 bucket for static website hosting');
@@ -9,6 +22,11 @@ export const TerraformGenerator: React.FC = () => {
     const [config, setConfig] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
 
     const handleGenerate = useCallback(async () => {
         if (!description.trim()) {
@@ -18,17 +36,34 @@ export const TerraformGenerator: React.FC = () => {
         setIsLoading(true);
         setError('');
         setConfig('');
-        try {
-            // Context is stubbed for now but demonstrates future capability
+
+        const executeGeneration = async () => {
             const context = 'User might have existing VPCs. Check before creating new ones.';
-            const result = await generateTerraformConfig(cloud, description, context);
+            const command = new GenerateTerraformConfigCommand(cloud, description, context);
+            const result = await aiService.execute(command) as string;
             setConfig(result);
+        };
+
+        try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) { throw new Error('Vault setup is required to use AI features.'); }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) { throw new Error('Vault must be unlocked to use AI features.'); }
+            }
+            
+            await executeGeneration();
+            addNotification('Terraform configuration generated successfully!', 'success');
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to generate config.');
+            const errorMessage = err instanceof Error ? err.message : 'Failed to generate config.';
+            setError(errorMessage);
+            addNotification(errorMessage, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [description, cloud]);
+    }, [description, cloud, vaultState, requestCreation, requestUnlock, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">

@@ -1,8 +1,10 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { generateComponentFromImageStream } from '../../services/index.ts';
+import { streamContent } from '../../services/index.ts';
 import { PhotoIcon, ArrowDownTrayIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 import { fileToBase64, blobToDataURL, downloadFile } from '../../services/fileUtils.ts';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 export const ScreenshotToComponent: React.FC = () => {
     const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -10,20 +12,45 @@ export const ScreenshotToComponent: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const { requestUnlock } = useVaultModal();
+    const { addNotification } = useNotification();
 
-    const handleGenerate = async (base64Image: string) => {
+    const handleGenerate = async (base64Image: string, mimeType: string) => {
         setIsLoading(true);
         setError('');
         setRawCode('');
-        try {
-            const stream = generateComponentFromImageStream(base64Image);
+        
+        const performGeneration = async () => {
+            const prompt = {
+                parts: [
+                    { text: 'Generate a single file for a React component that looks like this image, using Tailwind CSS for styling. Respond only with the TSX code, without any markdown fences or explanations.' },
+                    { inlineData: { mimeType: mimeType, data: base64Image } }
+                ]
+            };
+            const systemInstruction = 'You are an expert at creating React components from images. You only output valid TSX code.';
+            const stream = streamContent(prompt, systemInstruction, 0.3);
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;
                 setRawCode(fullResponse.replace(/^```(?:\w+\n)?/, '').replace(/```$/, ''));
             }
+        };
+
+        try {
+            await performGeneration();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            if (errorMessage.includes("Vault is locked")) {
+                addNotification("Vault is locked. Please unlock to proceed.", "info");
+                const unlocked = await requestUnlock();
+                if (unlocked) {
+                    await performGeneration();
+                } else {
+                    setError("Vault must be unlocked to generate components.");
+                }
+            } else {
+                setError(errorMessage);
+            }
         } finally {
             setIsLoading(false);
         }
@@ -33,7 +60,7 @@ export const ScreenshotToComponent: React.FC = () => {
         try {
             const [dataUrl, base64Image] = await Promise.all([blobToDataURL(blob), fileToBase64(blob as File)]);
             setPreviewImage(dataUrl);
-            handleGenerate(base64Image);
+            await handleGenerate(base64Image, blob.type);
         } catch (e) {
             setError('Could not process the image.');
         }
@@ -73,8 +100,8 @@ export const ScreenshotToComponent: React.FC = () => {
                         <label className="text-sm font-medium text-text-secondary">Generated Code</label>
                         {rawCode && !isLoading && (
                             <div className="flex items-center gap-2">
-                                <button onClick={() => navigator.clipboard.writeText(rawCode)} className="px-3 py-1 bg-gray-100 text-xs rounded-md hover:bg-gray-200">Copy Code</button>
-                                <button onClick={() => downloadFile(rawCode, 'Component.tsx', 'text/typescript')} className="flex items-center gap-1 px-3 py-1 bg-gray-100 text-xs rounded-md hover:bg-gray-200">
+                                <button onClick={() => navigator.clipboard.writeText(rawCode)} className="px-3 py-1 bg-gray-100 text-xs rounded-md hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600">Copy Code</button>
+                                <button onClick={() => downloadFile(rawCode, 'Component.tsx', 'text/typescript')} className="flex items-center gap-1 px-3 py-1 bg-gray-100 text-xs rounded-md hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600">
                                     <ArrowDownTrayIcon className="w-4 h-4" /> Download
                                 </button>
                             </div>

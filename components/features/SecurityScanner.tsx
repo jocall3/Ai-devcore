@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { analyzeCodeForVulnerabilities } from '../../services/aiService.ts';
+import React, { useState, useCallback } from 'react';
+import { analyzeCodeForVulnerabilities } from '../../services/aiService';
 import { runStaticScan, SecurityIssue } from '../../services/security/staticAnalysisService.ts';
 import type { SecurityVulnerability } from '../../types.ts';
 import { ShieldCheckIcon, SparklesIcon } from '../icons.tsx';
@@ -25,7 +25,7 @@ export const SecurityScanner: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const handleScan = async () => {
+    const handleScan = useCallback(async () => {
         if (!code.trim()) {
             setError('Please enter code to scan.');
             return;
@@ -48,7 +48,7 @@ export const SecurityScanner: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [code]);
 
     const SeverityBadge: React.FC<{ severity: string }> = ({ severity }) => {
         const colors: Record<string, string> = {
