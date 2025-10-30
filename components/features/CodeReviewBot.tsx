@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { streamContent } from '../../services/index.ts';
+import { reviewCodeStream } from '../../services/index.ts';
 import { useAiPersonalities } from '../../hooks/useAiPersonalities.ts';
 import { formatSystemPromptToString } from '../../utils/promptUtils.ts';
 import { CpuChipIcon } from '../icons.tsx';
@@ -69,8 +69,7 @@ export const CodeReviewBot: React.FC = () => {
                 }
             }
 
-            const prompt = `Review the following code snippet for bugs, style issues, and potential improvements. Provide feedback in markdown format.\n\n\`\`\`\n${code}\n\`\`\``;
-            const stream = streamContent(prompt, systemInstruction, 0.5);
+            const stream = reviewCodeStream(code, systemInstruction);
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;

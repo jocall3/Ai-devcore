@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { BeakerIcon } from '../icons.tsx';
+import { BeakerIcon } from '@/components/icons.tsx';
 
 const commonTypos = [
     'funtion', 'functoin', 'funciton', 'contructor', 'cosntructor',
