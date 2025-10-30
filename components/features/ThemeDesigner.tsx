@@ -1,10 +1,13 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { SparklesIcon, PhotoIcon } from '../icons.tsx';
-import { generateSemanticTheme } from '../../services/aiService.ts';
+import { generateSemanticTheme } from '../../services/index.ts';
 import { fileToBase64 } from '../../services/fileUtils.ts';
 import type { SemanticColorTheme, ColorTheme } from '../../types.ts';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { useTheme } from '../../hooks/useTheme.ts';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const ColorDisplay: React.FC<{ name: string; color: { name: string; value: string; } }> = ({ name, color }) => (
     <div className="flex items-center justify-between p-2 bg-background rounded-md border border-border">
@@ -39,22 +42,41 @@ export const ThemeDesigner: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [, , applyCustomTheme] = useTheme();
+    const { addNotification } = useNotification();
+    const { state } = useGlobalState();
+    const { requestUnlock, requestCreation } = useVaultModal();
 
     const handleGenerate = useCallback(async () => {
-        const textPart = { text: `Generate a theme based on this description: "${prompt}"` };
-        const imagePart = image ? { inlineData: { mimeType: 'image/png', data: image.base64 } } : null;
-        const parts = imagePart ? [textPart, imagePart] : [textPart];
-
-        setIsLoading(true); setError('');
+        setIsLoading(true);
+        setError('');
         try {
+            if (!state.vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) throw new Error("Vault setup is required to use AI features.");
+            }
+            if (!state.vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) throw new Error("Vault must be unlocked to use AI features.");
+            }
+
+            const textPart = { text: `Generate a theme based on this description: "${prompt}"` };
+            const imagePart = image ? { inlineData: { mimeType: 'image/png', data: image.base64 } } : null;
+            const parts = imagePart ? [textPart, imagePart] : [textPart];
+            
             const newTheme = await generateSemanticTheme({ parts });
             setTheme(newTheme);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "An unknown error occurred.");
+            const msg = err instanceof Error ? err.message : "An unknown error occurred.";
+            if (msg.includes('cancelled') || msg.includes('Vault must be unlocked') || msg.includes('Vault setup is required')) {
+                setError(msg);
+            } else {
+                setError(msg);
+                addNotification(msg, 'error');
+            }
         } finally {
             setIsLoading(false);
         }
-    }, [prompt, image]);
+    }, [prompt, image, state.vaultState, requestCreation, requestUnlock, addNotification]);
     
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -65,7 +87,36 @@ export const ThemeDesigner: React.FC = () => {
         }
     };
     
-    useEffect(() => { handleGenerate(); }, []);
+    useEffect(() => {
+        const generateInitialTheme = async () => {
+            setIsLoading(true);
+            setError('');
+            try {
+                if (!state.vaultState.isInitialized) {
+                    const created = await requestCreation();
+                    if (!created) throw new Error("Vault setup is required for AI features.");
+                }
+                if (!state.vaultState.isUnlocked) {
+                    const unlocked = await requestUnlock();
+                    if (!unlocked) throw new Error("Vault must be unlocked for AI features.");
+                }
+                const textPart = { text: 'A calming, minimalist theme for a blog' };
+                const newTheme = await generateSemanticTheme({ parts: [textPart] });
+                setTheme(newTheme);
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : "An unknown error occurred.";
+                if (!msg.toLowerCase().includes('cancelled')) {
+                    setError(msg);
+                    addNotification(msg, 'error');
+                }
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        generateInitialTheme();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handleApplyTheme = () => {
         if (!theme) return;

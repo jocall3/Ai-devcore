@@ -1,7 +1,11 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { GitBranchIcon, ArrowDownTrayIcon } from '../icons.tsx';
-import { generateChangelogFromLogStream, downloadFile } from '../../services/index.ts';
+import { generateChangelogFromLogStream } from '../../services/aiService.ts';
+import { downloadFile } from '../../services/fileUtils.ts';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const exampleLog = `* commit 3a4b5c6d7e8f9g0h1i2j3k4l5m6n7o8p9q0r (HEAD -> main, origin/main)
 |\  Merge: 1a2b3c4 2d3e4f5
@@ -80,6 +84,10 @@ export const VisualGitTree: React.FC<{ logInput?: string }> = ({ logInput: initi
     const [analysis, setAnalysis] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
 
     const handleAnalyze = useCallback(async (logToAnalyze: string) => {
         if (!logToAnalyze.trim()) {
@@ -90,6 +98,23 @@ export const VisualGitTree: React.FC<{ logInput?: string }> = ({ logInput: initi
         setError('');
         setAnalysis('');
         try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
             const stream = generateChangelogFromLogStream(logToAnalyze);
             let fullResponse = '';
             for await (const chunk of stream) {
@@ -99,10 +124,11 @@ export const VisualGitTree: React.FC<{ logInput?: string }> = ({ logInput: initi
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
             setError(`Failed to analyze log: ${errorMessage}`);
+            addNotification(`Failed to analyze log: ${errorMessage}`, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
     useEffect(() => {
         if (initialLogInput) {

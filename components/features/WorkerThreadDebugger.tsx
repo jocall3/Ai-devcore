@@ -1,8 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { BugAntIcon, ArrowDownTrayIcon } from '../icons.tsx';
-import { analyzeConcurrencyStream } from '../../services/aiService.ts';
+import { analyzeConcurrencyStream, downloadFile } from '../../services/index.ts';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
-import { downloadFile } from '../../services/fileUtils.ts';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
@@ -84,8 +83,10 @@ export const WorkerThreadDebugger: React.FC<{ codeInput?: string }> = ({ codeInp
             }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            setError(`Failed to analyze code: ${errorMessage}`);
-            addNotification(`Analysis failed: ${errorMessage}`, 'error');
+            if (!errorMessage.includes('cancelled')) {
+                setError(`Failed to analyze code: ${errorMessage}`);
+                addNotification(`Analysis failed: ${errorMessage}`, 'error');
+            }
         } finally {
             setIsLoading(false);
         }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TypographyLabIcon } from '../icons.tsx';
+import { TypographyLabIcon } from '@/components/icons.tsx';
 
 const popularFonts = [
     'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Oswald', 'Source Sans Pro', 'Raleway', 'Poppins', 'Nunito', 'Merriweather',
