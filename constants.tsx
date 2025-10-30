@@ -1,17 +1,15 @@
-
-
 import React from 'react';
 import {
     CommandCenterIcon, CodeExplainerIcon, FeatureBuilderIcon, CodeMigratorIcon, ThemeDesignerIcon, SnippetVaultIcon,
     UnitTestGeneratorIcon, CommitGeneratorIcon, GitLogAnalyzerIcon, ConcurrencyAnalyzerIcon, RegexSandboxIcon,
     PromptCraftPadIcon, CodeFormatterIcon, JsonTreeIcon, CssGridEditorIcon, SchemaDesignerIcon, PwaManifestEditorIcon,
-    MarkdownSlidesIcon, ScreenshotToComponentIcon, SvgPathEditorIcon, StyleTransferIcon, CodingChallengeIcon,
+    MarkdownSlidesIcon, SvgPathEditorIcon, StyleTransferIcon, CodingChallengeIcon,
     CodeReviewBotIcon, ChangelogGeneratorIcon, CronJobBuilderIcon,
     AsyncCallTreeIcon, AudioToCodeIcon, CodeDiffGhostIcon, CodeSpellCheckerIcon, ColorPaletteGeneratorIcon, LogicFlowBuilderIcon,
     MetaTagEditorIcon, NetworkVisualizerIcon, ResponsiveTesterIcon, SassCompilerIcon, ImageGeneratorIcon, XbrlConverterIcon,
     DigitalWhiteboardIcon, TypographyLabIcon, AiPullRequestAssistantIcon, ProjectExplorerIcon,
     ServerStackIcon, DocumentTextIcon, ChartBarIcon, EyeIcon, PaperAirplaneIcon, CloudIcon, ShieldCheckIcon, CpuChipIcon, SparklesIcon,
-    MailIcon, BugAntIcon, MagnifyingGlassIcon, RectangleGroupIcon, GcpIcon
+    MailIcon, BugAntIcon, MagnifyingGlassIcon, RectangleGroupIcon, GcpIcon, ScreenshotToComponentIcon
 } from './components/icons.tsx';
 
 export const CHROME_VIEW_IDS = ['features-list'] as const;
@@ -106,6 +104,7 @@ export const RAW_FEATURES: RawFeature[] = [
     { id: "schema-designer", name: "Schema Designer", description: "Visually design a database schema with a drag-and-drop interface and SQL export.", icon: <SchemaDesignerIcon />, category: "Database" },
     { id: "xbrl-converter", name: "XBRL Converter", description: "Convert JSON data to a simplified XBRL-like XML format using AI.", icon: <XbrlConverterIcon />, category: "Data" },
     { id: "logic-flow-builder", name: "Logic Flow Builder", description: "A visual tool for building application logic flows.", icon: <LogicFlowBuilderIcon />, category: "Workflow" },
+    { id: "screenshot-to-component", name: "Screenshot to Component", description: "Generate React/Tailwind code from a screenshot of a UI element.", icon: <ScreenshotToComponentIcon />, category: "AI Tools" },
 ];
 
 export const ALL_FEATURE_IDS = RAW_FEATURES.map(f => f.id);

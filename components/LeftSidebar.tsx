@@ -1,14 +1,34 @@
 import React from 'react';
-import type { ViewType, SidebarItem } from '../types.ts';
-import { useGlobalState } from '../contexts/GlobalStateContext.tsx';
-import { signOutUser } from '../services/googleAuthService.ts';
-import { ArrowLeftOnRectangleIcon } from './icons.tsx';
+import type { ViewType, SidebarItem } from '@/types.ts';
+import { useGlobalState } from '@/contexts/GlobalStateContext.tsx';
+import { signOutUser } from '@/services/googleAuthService.ts';
+import { ArrowLeftOnRectangleIcon, LockClosedIcon } from '@/components/icons.tsx';
+import { useVaultModal } from '@/contexts/VaultModalContext.tsx';
+import { useNotification } from '@/contexts/NotificationContext.tsx';
 
 interface LeftSidebarProps {
   items: SidebarItem[];
   activeView: ViewType;
   onNavigate: (view: ViewType, props?: any) => void;
 }
+
+// Views that do NOT require an unlocked vault.
+// By default, most features are assumed to require the vault for API keys.
+const NON_VAULT_VIEWS: ViewType[] = [
+    'settings',
+    'css-grid-editor',
+    'pwa-manifest-editor',
+    'markdown-slides-generator',
+    'svg-path-editor',
+    'typography-lab',
+    'code-diff-ghost',
+    'code-spell-checker',
+    'meta-tag-editor',
+    'responsive-tester',
+    'sass-scss-compiler',
+    'schema-designer',
+    'env-manager',
+];
 
 const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({ text, children }) => {
   return (
@@ -23,17 +43,55 @@ const Tooltip: React.FC<{ text: string, children: React.ReactNode }> = ({ text, 
 
 export const LeftSidebar: React.FC<LeftSidebarProps> = ({ items, activeView, onNavigate }) => {
     const { state, dispatch } = useGlobalState();
-    const { user } = state;
+    const { user, vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
 
     const handleLogout = () => {
         try {
             signOutUser();
-            // The user state will be updated via the callback in the auth service
-            // and an action is dispatched there, but for immediate UI feedback we can also dispatch here.
             dispatch({ type: 'SET_APP_USER', payload: null });
         } catch (error) {
             console.error("Failed to sign out:", error);
-            alert("Failed to sign out. Please try again.");
+            addNotification("Failed to sign out. Please try again.", 'error');
+        }
+    };
+
+    const handleNavigation = async (item: SidebarItem) => {
+        if (item.action) {
+          item.action();
+          return;
+        }
+    
+        const requiresVault = !NON_VAULT_VIEWS.includes(item.view);
+    
+        if (requiresVault) {
+          if (!vaultState.isInitialized) {
+              addNotification('A Master Password is required to use this feature.', 'info');
+              const created = await requestCreation();
+              if (!created) {
+                  addNotification('Vault setup cancelled.', 'error');
+                  return; // Stop navigation
+              }
+          } else if (!vaultState.isUnlocked) {
+              const unlocked = await requestUnlock();
+              if (!unlocked) {
+                  addNotification('Vault unlock cancelled.', 'error');
+                  return; // Stop navigation
+              }
+          }
+        }
+        
+        onNavigate(item.view, item.props);
+      };
+
+      const handleVaultClick = async () => {
+        if (!vaultState.isInitialized) {
+            await requestCreation();
+        } else if (!vaultState.isUnlocked) {
+            await requestUnlock();
+        } else {
+            addNotification('Vault is already unlocked.', 'info');
         }
     };
 
@@ -51,15 +109,9 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ items, activeView, onN
           return (
             <Tooltip key={item.id} text={item.label}>
               <button
-                onClick={() => {
-                  if (item.action) {
-                    item.action();
-                  } else {
-                    onNavigate(item.view, item.props);
-                  }
-                }}
+                onClick={() => handleNavigation(item)}
                 className={`flex items-center justify-center w-12 h-12 rounded-lg transition-colors duration-200
-                  ${isActive ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-gray-100'}`
+                  ${isActive ? 'bg-primary/10 text-primary' : 'text-text-secondary hover:bg-gray-100 dark:hover:bg-slate-700'}`
                 }
               >
                 {item.icon}
@@ -69,6 +121,14 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ items, activeView, onN
         })}
       </div>
       <div className="mt-auto flex-shrink-0 flex flex-col items-center gap-2">
+        <Tooltip text={vaultState.isUnlocked ? 'Vault Unlocked' : vaultState.isInitialized ? 'Vault Locked' : 'Setup Vault'}>
+            <button
+            onClick={handleVaultClick}
+            className={`flex items-center justify-center w-12 h-12 rounded-lg transition-colors duration-200 ${vaultState.isUnlocked ? 'text-green-500' : vaultState.isInitialized ? 'text-yellow-500' : 'text-text-secondary'}`}
+            >
+            <LockClosedIcon />
+            </button>
+        </Tooltip>
          {user && (
             <Tooltip text={user.displayName || 'User'}>
                  <img src={user.photoURL || undefined} alt={user.displayName || 'User'} className="w-10 h-10 rounded-full border-2 border-border" />
@@ -78,7 +138,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({ items, activeView, onN
             <Tooltip text="Logout">
                 <button
                 onClick={handleLogout}
-                className="flex items-center justify-center w-12 h-12 rounded-lg text-text-secondary hover:bg-gray-100"
+                className="flex items-center justify-center w-12 h-12 rounded-lg text-text-secondary hover:bg-gray-100 dark:hover:bg-slate-700"
                 >
                 <ArrowLeftOnRectangleIcon />
                 </button>
