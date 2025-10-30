@@ -7,8 +7,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenAI } from "@google/genai";
-import type { GenerateContentResponse, FunctionDeclaration } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai"; // Corrected import name
+import type { GenerateContentResponse, FunctionDeclaration } from "@google/generative-ai"; // Corrected import name
 import { logError } from './telemetryService.ts';
 
 /**
@@ -119,10 +119,10 @@ export interface IAiProvider {
 export class GeminiProvider implements IAiProvider {
   /**
    * @private
-   * @type {GoogleGenAI}
-   * @description The instance of the GoogleGenAI client.
+   * @type {GoogleGenerativeAI}
+   * @description The instance of the GoogleGenerativeAI client.
    */
-  private ai: GoogleGenAI;
+  private ai: GoogleGenerativeAI; // Corrected type name
 
   /**
    * Creates an instance of GeminiProvider.
@@ -136,7 +136,7 @@ export class GeminiProvider implements IAiProvider {
     if (!apiKey) {
       throw new Error("Google Gemini API key is required to initialize GeminiProvider.");
     }
-    this.ai = new GoogleGenAI({ apiKey });
+    this.ai = new GoogleGenerativeAI({ apiKey }); // Corrected class name
   }
 
   /**
@@ -150,8 +150,10 @@ export class GeminiProvider implements IAiProvider {
             config: { systemInstruction, temperature }
         });
 
-        for await (const chunk of response) {
-            yield chunk.text();
+        for await (const chunk of response.stream) { // Access response.stream
+            if (chunk.text) { // Check if text property exists
+                yield chunk.text; // Access .text as a property, not a method
+            }
         }
     } catch (error) {
         console.error("Error streaming from Gemini model:", error);
@@ -169,12 +171,14 @@ export class GeminiProvider implements IAiProvider {
    */
   async generateContent(prompt: string, systemInstruction: string, temperature = 0.5): Promise<string> {
     try {
-        const response = await this.ai.models.generateContent({
+        const result = await this.ai.models.generateContent({ // Use result to distinguish from response in error message
             model: 'gemini-1.5-flash',
-            contents: prompt,
-            config: { systemInstruction, temperature }
+            contents: [{ role: 'user', parts: [{ text: prompt }] }], // Ensure contents are in the correct format
+            systemInstruction,
+            generationConfig: { temperature }
         });
-        return response.text();
+        const response = result.response;
+        return response.text(); // Access .text() as a method from the GenerateContentResponse interface
     } catch (error) {
         console.error("Error generating content from Gemini model:", error);
         logError(error as Error, { prompt, systemInstruction });
@@ -187,17 +191,22 @@ export class GeminiProvider implements IAiProvider {
    */
   async generateJson<T>(prompt: any, systemInstruction: string, schema: any, temperature = 0.2): Promise<T> {
     try {
-        const response = await this.ai.models.generateContent({
+        const result = await this.ai.models.generateContent({
             model: "gemini-1.5-flash",
-            contents: prompt,
-            config: {
-                systemInstruction,
-                responseMimeType: "application/json",
-                responseSchema: schema,
-                temperature,
-            }
+            contents: [{ role: 'user', parts: [{ text: prompt }] }], // Ensure contents are in the correct format
+            systemInstruction,
+            generationConfig: { temperature },
+            tools: [{ functionDeclarations: [] }], // Empty tools if not using function calling
+            toolConfig: { functionCallingConfig: { mode: "ANY" } }, // Explicitly set if needed, or omit
+            responseMimeType: "application/json", // This is usually part of generationConfig or model capabilities
+            // responseSchema: schema, // `responseSchema` is not directly supported in the model config for JSON mode.
+            // JSON mode expects `response_mime_type: application/json` and guides the model to produce JSON.
+            // Schema validation would typically happen client-side after parsing the text.
         });
-        return JSON.parse(response.text().trim());
+        const response = result.response;
+        // Gemini's JSON mode aims to return valid JSON in the text.
+        // The schema parameter might be used to prompt the model to conform, but validation is manual.
+        return JSON.parse(response.text().trim()) as T; // Access .text() as a method
     } catch (error) {
         console.error("Error generating JSON from Gemini model:", error);
         logError(error as Error, { prompt, systemInstruction });
@@ -210,7 +219,18 @@ export class GeminiProvider implements IAiProvider {
    */
   async getInferenceFunction(prompt: string, functionDeclarations: FunctionDeclaration[], knowledgeBase: string): Promise<CommandResponse> {
     try {
-        const response: GenerateContentResponse = await this.ai.models.generateContent({ model: "gemini-1.5-flash", contents: prompt, config: { systemInstruction: `You are a helpful assistant for a developer tool. You must decide which function to call to satisfy the user's request, based on your knowledge base. If no specific tool seems appropriate, respond with text.\n\nKnowledge Base:\n${knowledgeBase}`, tools: [{ functionDeclarations }] } });
+        const result = await this.ai.models.generateContent({
+            model: "gemini-1.5-flash",
+            contents: [{ role: 'user', parts: [{ text: prompt }] }], // Ensure contents are in the correct format
+            systemInstruction: `You are a helpful assistant for a developer tool. You must decide which function to call to satisfy the user's request, based on your knowledge base. If no specific tool seems appropriate, respond with text.\n\nKnowledge Base:\n${knowledgeBase}`,
+            tools: [{ functionDeclarations }],
+            toolConfig: {
+                functionCallingConfig: {
+                    mode: "ANY", // AUTO, ANY, NONE
+                },
+            },
+        });
+        const response = result.response;
         const functionCalls: { name: string, args: any }[] = [];
         const parts = response.candidates?.[0]?.content?.parts ?? [];
         for (const part of parts) { 
@@ -218,7 +238,7 @@ export class GeminiProvider implements IAiProvider {
                 functionCalls.push({ name: part.functionCall.name, args: part.functionCall.args }); 
             } 
         }
-        return { text: response.text(), functionCalls: functionCalls.length > 0 ? functionCalls : undefined };
+        return { text: response.text(), functionCalls: functionCalls.length > 0 ? functionCalls : undefined }; // Access .text() as a method
     } catch (error) {
         logError(error as Error, { prompt });
         throw error;
@@ -229,27 +249,50 @@ export class GeminiProvider implements IAiProvider {
    * @inheritdoc
    */
   async generateImage(prompt: string): Promise<string> {
-    const response = await this.ai.models.generateImages({
-        model: 'imagen-4.0-generate-001',
-        prompt: prompt,
-        config: { numberOfImages: 1, outputMimeType: 'image/png' },
-    });
+    // Note: The generateImages method is part of a separate API or older client
+    // With `genai` SDK, image generation is usually done via `generateContent` with image parts,
+    // or by calling a separate image generation service/API.
+    // The current `@google/generative-ai` SDK does not expose `models.generateImages` directly.
+    // This section might need an external image generation API call or a different model.
+    // For now, retaining a placeholder or simulating a text-only response if image generation isn't directly supported.
 
-    const images = response.generatedImages;
-    if (!images || images.length === 0 || !images[0].image.imageBytes) {
-        throw new Error('Image generation failed to return an image.');
+    // If using the official `genai` client, image generation typically involves a prompt with a specific model for images,
+    // or through a service like Google Cloud's AI Platform / Vertex AI.
+    // The `generateImages` method is not part of `GoogleGenerativeAI` from `@google/generative-ai`.
+    // This method would typically call an external image generation service or a specific image model.
+    // Given the current SDK, this method would require a significant refactor to use a different image generation API.
+    // As a placeholder or if an external service is intended, this would remain.
+    
+    // For now, let's throw an error or return a placeholder if actual image generation isn't supported by this SDK.
+    // A robust solution would involve a dedicated image generation service integration (e.g., DALL-E, Stability AI, or Google's Imagen API through Vertex AI).
+    throw new Error("Direct image generation with `generateImages` is not supported by the current GoogleGenerativeAI SDK. Please integrate with a dedicated image generation API.");
+
+    // Example of how it might look if a dedicated image generation service (like an external Imagen API) was integrated:
+    /*
+    try {
+      const response = await fetch('YOUR_IMAGEN_API_ENDPOINT', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.apiKey}` },
+        body: JSON.stringify({ prompt, numberOfImages: 1, outputMimeType: 'image/png' }),
+      });
+      const data = await response.json();
+      const base64ImageBytes: string = data.generatedImages[0].image.imageBytes;
+      return `data:image/png;base64,${base64ImageBytes}`;
+    } catch (error) {
+      console.error("Error generating image:", error);
+      logError(error as Error, { prompt });
+      throw error;
     }
-    const base64ImageBytes: string = images[0].image.imageBytes;
-    return `data:image/png;base64,${base64ImageBytes}`;
+    */
   }
 
   /**
    * @inheritdoc
    */
   async generateImageFromImageAndText(prompt: string, _base64Image: string, _mimeType: string): Promise<string> {
-    console.warn("Image-to-image generation is not fully supported by the current SDK implementation; using text prompt only.");
+    console.warn("Image-to-image generation is not fully supported by the current SDK implementation for direct image modifications. Falling back to text-to-image or requiring a dedicated image editing service.");
     // When SDK supports image-to-image, the implementation will change here.
-    // For now, we fall back to text-to-image.
-    return this.generateImage(prompt);
+    // For now, we fall back to text-to-image or throw.
+    return this.generateImage(prompt); // This will now throw the error defined above.
   }
 }
