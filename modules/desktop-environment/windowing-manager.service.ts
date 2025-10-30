@@ -9,18 +9,7 @@ import {
   type WindowContext,
   type WindowPosition
 } from './window.state-machine';
-
-// --- Placeholder Interfaces (to be replaced by actual implementations) ---
-
-/**
- * @interface IEventBus
- * @description Represents the central asynchronous event bus for inter-module communication.
- * This is a placeholder and should be replaced with the actual application's event bus implementation.
- */
-export interface IEventBus {
-  publish<T>(topic: string, data?: T): void;
-  subscribe<T>(topic: string, handler: (data: T) => void): () => void;
-}
+import type { IEventBus } from '../../core/bus/event-bus.service';
 
 // --- Type Definitions ---
 
@@ -53,6 +42,17 @@ export interface WindowPublicState extends WindowContext {
   stateValue: WindowSnapshot['value'];
   isActive: boolean;
 }
+
+// Augment the central EventBus map with events specific to this module.
+// This ensures type safety when publishing events without modifying the core EventBus file.
+declare module '../../core/bus/event-bus.service' {
+  interface AppEventMap {
+    'window:opened': { windowId: string; featureId: string };
+    'window:minimized': { windowId: string };
+    'window:state_changed': WindowPublicState[];
+  }
+}
+
 
 const Z_INDEX_BASE = 10;
 
