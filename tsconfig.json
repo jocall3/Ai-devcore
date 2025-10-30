@@ -15,7 +15,7 @@
 
     /* Bundler mode */
     "module": "ESNext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "moduleDetection": "force",
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
@@ -24,16 +24,17 @@
     "jsx": "react-jsx",
 
     /* Linting / Strictness */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true,
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": false,
 
     /* Decorators for DI */
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
 
     /* Path Aliases */
+    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*"

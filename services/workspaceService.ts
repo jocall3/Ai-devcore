@@ -1,8 +1,5 @@
-
-
 import { ensureGapiClient } from './googleApiService.ts';
 import { logError } from './telemetryService.ts';
-import type { SlideSummary } from '../types.ts';
 
 declare var gapi: any;
 
