@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import type { GeneratedFile } from '../../types.ts';
-import { generateFeature, generateFullStackFeature, generateUnitTestsStream, generateCommitMessageStream, generateFile } from '../../services/index.ts';
+import { generateFeature, generateFullStackFeature, generateUnitTestsStream, generateCommitMessageStream} from '../../services/index.ts';
 import { saveFile, getAllFiles, clearAllFiles } from '../../services/dbService.ts';
 import { CpuChipIcon, DocumentTextIcon, BeakerIcon, GitBranchIcon, CloudIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
