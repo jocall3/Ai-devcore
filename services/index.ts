@@ -1,3 +1,4 @@
+```typescript
 /**
  * @file Barrel file for the services module.
  * This file acts as a facade, exporting all public services and functions.
@@ -26,10 +27,21 @@ export * from './workspaceConnectorService.ts';
 
 // --- Type Re-exports for external consumption ---
 export type { EncryptedData, GeneratedFile, StructuredPrSummary, StructuredExplanation, SemanticColorTheme, SecurityVulnerability, CodeSmell, CustomFeature, CronParts } from '../types.ts';
-export type { IAiProvider } from './geminiService.ts'; // Exporting IAiProvider for external use
+
+// --- IAiProvider Definition ---
+// This interface defines the contract for AI providers in the new architecture.
+// It is defined here to resolve compilation errors within this file and make it available
+// via the services barrel, assuming it's not properly exported elsewhere yet during refactor.
+// Ideally, this interface would reside in a shared interfaces/types file (e.g., ai-engine/interfaces/i-ai-provider.ts).
+export interface IAiProvider {
+    streamContent(prompt: string | { parts: any[] }, systemInstruction: string, temperature?: number): AsyncGenerator<string>;
+    generateContent(prompt: string, systemInstruction: string, temperature?: number): Promise<string>;
+    generateJson<T>(prompt: any, systemInstruction: string, schema: any, temperature?: number): Promise<T>;
+    // Add other methods here if they are consistently part of the AI provider contract
+}
+
 
 // --- Local Type Imports for internal use in index.ts ---
-// These are needed for function signatures within this file itself.
 import type { StructuredExplanation, StructuredPrSummary, CronParts, SemanticColorTheme } from '../types.ts';
 import type { ICommand } from './aiService'; // Assuming ICommand is a type/interface from aiService.ts
 
@@ -37,10 +49,10 @@ import type { ICommand } from './aiService'; // Assuming ICommand is a type/inte
 // This section acts as a facade to bridge old function-based imports
 // with a new provider-based AI service architecture during a refactor.
 
-import { GeminiProvider } from './geminiService.ts'; // IAiProvider imported as type above
+import { GeminiProvider } from './geminiService.ts'; // GeminiProvider should implement IAiProvider
 import { getDecryptedCredential } from './vaultService.ts';
-// Corrected import for Google Generative AI client to use '@google/genai'
-import { GoogleGenerativeAI, Part, FunctionDeclaration } from '@google/genai';
+// Corrected import for Google Generative AI client (using 'google-generative-ai' package)
+import { GoogleGenerativeAI, Part, FunctionDeclaration } from 'google-generative-ai';
 
 // Singleton provider instance logic to avoid re-initializing on every call
 let provider: IAiProvider | null = null;
@@ -59,8 +71,8 @@ function getProvider(): Promise<IAiProvider> {
             if (!apiKey) {
                 throw new Error("Vault is locked or Gemini API key is not configured.");
             }
-            // GeminiProvider's constructor expects the API key string based on the error message.
-            // The GoogleGenerativeAI client is likely instantiated within the GeminiProvider.
+            // GeminiProvider's constructor expects the API key string.
+            // It is expected to implement the IAiProvider interface.
             provider = new GeminiProvider(apiKey);
             providerPromise = null; // Clear promise once resolved
             return provider;
@@ -76,19 +88,16 @@ function getProvider(): Promise<IAiProvider> {
 
 export async function* streamContent(prompt: string | { parts: any[] }, systemInstruction: string, temperature = 0.5): AsyncGenerator<string> {
     const p = await getProvider();
-    // streamContent expects separate arguments, not an object
     yield* p.streamContent(prompt, systemInstruction, temperature);
 }
 
 export async function generateContent(prompt: string, systemInstruction: string, temperature = 0.5): Promise<string> {
     const p = await getProvider();
-    // generateContent expects separate arguments, not an object
     return p.generateContent(prompt, systemInstruction, temperature);
 }
 
 export async function generateJson<T>(prompt: any, systemInstruction: string, schema: any, temperature = 0.2): Promise<T> {
     const p = await getProvider();
-    // generateJson expects separate arguments, not an object
     return p.generateJson<T>(prompt, systemInstruction, schema, temperature);
 }
 
@@ -196,14 +205,12 @@ export async function* convertJsonToXbrlStream(json: string): AsyncGenerator<str
 
 export async function explainCodeStructured(code: string): Promise<StructuredExplanation> {
     const prompt = `Analyze this code and provide a structured explanation.\n\n${code}`;
-    // Replaced Type.X with string literals as Type is not imported/defined
     const schema = { type: 'object', properties: { summary: { type: 'string' }, lineByLine: { type: 'array', items: { type: 'object', properties: { lines: { type: 'string' }, explanation: { type: 'string' } } } }, complexity: { type: 'object', properties: { time: { type: 'string' }, space: { type: 'string' } } }, suggestions: { type: 'array', items: { type: 'string' } } } };
     return generateJson(prompt, "You are an expert code analyst that returns data in JSON format.", schema);
 }
 
 export async function generatePrSummaryStructured(diff: string): Promise<StructuredPrSummary> {
     const prompt = `Generate a structured PR summary for this diff:\n\n${diff}`;
-    // Replaced Type.X with string literals
     const schema = { type: 'object', properties: { title: { type: 'string' }, summary: { type: 'string' }, changes: { type: 'array', items: { type: 'string' } } } };
     return generateJson(prompt, "You generate structured PR summaries in JSON format.", schema);
 }
@@ -240,7 +247,6 @@ export async function generateColorPalette(baseColor: string): Promise<SemanticC
 
 export async function generateCronFromDescription(description: string): Promise<CronParts> {
     const prompt = `Convert this description to a cron expression parts: "${description}"`;
-    // Replaced Type.X with string literals
     const schema = { type: 'object', properties: { minute: { type: 'string' }, hour: { type: 'string' }, dayOfMonth: { type: 'string' }, month: { type: 'string' }, dayOfWeek: { type: 'string' } } };
     return generateJson(prompt, "You are a cron job expert. You return a JSON object with the parts of a cron expression.", schema, 0.2);
 }
@@ -252,7 +258,6 @@ export async function generateTerraformConfig(cloud: 'aws' | 'gcp', description:
 }
 
 export async function generateSemanticTheme(prompt: { parts: any[] }): Promise<SemanticColorTheme> {
-    // Replaced Type.X with string literals
     const schema = { type: 'object', properties: { mode: { type: 'string', enum: ['light', 'dark'] }, palette: { type: 'object', properties: { primary: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, secondary: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, accent: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, neutral: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } } } }, theme: { type: 'object', properties: { background: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, surface: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, textPrimary: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, textSecondary: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, textOnPrimary: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, border: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } } } }, accessibility: { type: 'object', properties: { primaryOnSurface: { type: 'object', properties: { ratio: { type: 'number' }, score: { type: 'string' } } }, textPrimaryOnSurface: { type: 'object', properties: { ratio: { type: 'number' }, score: { type: 'string' } } }, textSecondaryOnSurface: { type: 'object', properties: { ratio: { type: 'number' }, score: { type: 'string' } } }, textOnPrimaryOnPrimary: { type: 'object', properties: { ratio: { type: 'number' }, score: { type: 'string' } } } } } } };
     return generateJson(prompt, "You are a UI/UX designer specializing in color theory and accessibility. Generate a complete theme based on the user's prompt, adhering to the provided JSON schema.", schema, 0.8);
 }
@@ -277,9 +282,16 @@ export async function* generateBugReproductionTestStream(bugDescription: string,
     yield* streamContent(prompt, systemInstruction, 0.5);
 }
 
-export async function* generateIamPolicyStream(resource: string, actions: string[], context: string): AsyncGenerator<string> {
-    const prompt = `Generate an IAM policy for resource "${resource}" allowing actions "${actions.join(', ')}". Context: ${context}`;
+// Adjusted signature for generateIamPolicyStream to match expected usage (2 arguments)
+export async function* generateIamPolicyStream(policyDescription: string, targetPlatform: string): AsyncGenerator<string> {
+    const prompt = `Generate an IAM policy described as: "${policyDescription}". The policy should be applicable to the ${targetPlatform} cloud platform.`;
     const systemInstruction = `You are a security expert. Provide the IAM policy in YAML or JSON format inside a markdown block.`;
+    yield* streamContent(prompt, systemInstruction, 0.4);
+}
+
+export async function* generateDockerfileStream(framework: string): AsyncGenerator<string> {
+    const prompt = `Generate a Dockerfile for a ${framework} application.`;
+    const systemInstruction = `You are an expert DevOps engineer specializing in Docker. Provide a complete, valid Dockerfile in a single markdown code block.`;
     yield* streamContent(prompt, systemInstruction, 0.4);
 }
 
@@ -308,7 +320,7 @@ export async function* convertToFunctionalComponent(code: string): AsyncGenerato
 }
 
 // Pruned the re-export list to only include members that exist in './aiService'
-// Added generateFile, generateImage, and ICommand based on errors.
+// and adjust types. Removed 'generateFile' and 'generateImage' due to errors indicating they don't exist.
 export {
     getInferenceFunction,
     generateImageFromImageAndText,
@@ -321,7 +333,9 @@ export {
     generatePipelineCode,
     generateTechnicalSpecFromDiff,
     generateMockData,
-    generateFile, // Added based on error
-    generateImage, // Added based on error
-    ICommand // Added based on error, assuming it's a type or value from aiService.ts
 } from './aiService';
+
+export type {
+    ICommand // Re-export ICommand as a type
+} from './aiService';
+```
