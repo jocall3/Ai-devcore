@@ -5,7 +5,7 @@ import type { CustomFeature } from '../../types.ts';
 import { CpuChipIcon, TrashIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
-import { ALL_FEATURES } from './index.ts';
+import { ALL_FEATURES } from './index.tsx';
 import { CustomFeatureRunner } from '../shared/CustomFeatureRunner.tsx';
 
 const ICON_MAP: Record<string, React.FC> = ALL_FEATURES.reduce((acc, feature) => {
