@@ -1,3 +1,4 @@
+```typescript
 /**
  * @fileoverview Defines the AIEngine, the primary entry point for all AI-related
  * operations. It acts as a facade, delegating computationally intensive tasks to a
@@ -38,7 +39,8 @@ export interface IAIEngine {
   analyzeConcurrencyStream(code: string): Promise<any>;
   debugErrorStream(error: Error): Promise<any>;
   generateChangelogFromLogStream(log: string): Promise<any>;
-  generateIamPolicyStream(description: string, platform: 'aws' | 'gcp'): Promise<any>;
+  // Updated signature for generateIamPolicyStream
+  generateIamPolicyStream(resource: string, actions: string[], context: string): Promise<any>;
   generateRegExStream(prompt: string): Promise<any>;
   formatCodeStream(code: string): Promise<any>;
   generateComponentFromImageStream(base64Image: string): Promise<any>;
@@ -48,6 +50,8 @@ export interface IAIEngine {
   reviewCodeStream(code: string, systemInstruction?: string): Promise<any>;
   enhanceSnippetStream(snippet: string): Promise<any>;
   summarizeNotesStream(notes: string): Promise<any>;
+  // New method for Dockerfile generation
+  generateDockerfile(framework: string): Promise<string>;
 }
 
 // This type is missing from the global types.ts. Defining it here for local correctness.
@@ -157,8 +161,9 @@ export class AIEngine implements IAIEngine {
     return this.computationService.execute('generateChangelogFromLogStream', log);
   }
 
-  public generateIamPolicyStream(description: string, platform: 'aws' | 'gcp'): Promise<any> {
-    return this.computationService.execute('generateIamPolicyStream', description, platform);
+  // Updated implementation for generateIamPolicyStream
+  public generateIamPolicyStream(resource: string, actions: string[], context: string): Promise<any> {
+    return this.computationService.execute('generateIamPolicyStream', resource, actions, context);
   }
 
   public generateRegExStream(prompt: string): Promise<any> {
@@ -196,4 +201,10 @@ export class AIEngine implements IAIEngine {
   public summarizeNotesStream(notes: string): Promise<any> {
     return this.computationService.execute('summarizeNotesStream', notes);
   }
+
+  // New method implementation for generateDockerfile
+  public generateDockerfile(framework: string): Promise<string> {
+    return this.computationService.execute('generateDockerfile', framework);
+  }
 }
+```
