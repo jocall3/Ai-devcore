@@ -1,5 +1,9 @@
+```typescript
 import React, { useState } from 'react';
-import { aiService, ICommand, IAiProvider } from '../../services/index.ts';
+import { ICommand } from '../../core/command-bus/command-bus.service.ts'; // Corrected import path for ICommand
+import { IAiProvider } from '../../modules/ai-engine/providers/i-ai-provider.ts'; // Assuming IAiProvider is now here
+import { aiEngineService } from '../../modules/ai-engine/ai-engine.service.ts'; // Assuming the main AI service instance is exported here
+
 import { PaperAirplaneIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 
@@ -34,7 +38,8 @@ export const CiCdPipelineGenerator: React.FC = () => {
         setError('');
         try {
             const command = new GenerateCiCdConfigCommand(platform, description);
-            const result = await aiService.execute(command) as string;
+            // Changed aiService to aiEngineService to reflect the refactored AI engine
+            const result = await aiEngineService.execute(command) as string;
             setConfig(result);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Failed to generate config.';
@@ -77,3 +82,4 @@ export const CiCdPipelineGenerator: React.FC = () => {
         </div>
     );
 };
+```
