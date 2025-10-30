@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { generateChangelogFromLogStream } from '../../services/index.ts';
+import { streamContent } from '../../services/index.ts';
 import { GitBranchIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
@@ -57,7 +57,10 @@ export const ChangelogGenerator: React.FC = () => {
                 }
             }
 
-            const stream = generateChangelogFromLogStream(log);
+            const prompt = `Generate a formatted markdown changelog from this git log output:\n\n${log}`;
+            const systemInstruction = 'You are an expert at writing release notes and changelogs. Group changes by type (e.g., Features, Fixes).';
+            const stream = streamContent(prompt, systemInstruction, 0.5);
+
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;

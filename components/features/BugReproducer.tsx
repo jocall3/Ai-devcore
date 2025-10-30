@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { generateBugReproductionTestStream } from '../../services/index.ts';
-import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { isVaultInitialized } from '../../services/vaultService.ts';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { BugAntIcon } from '../icons.tsx';
@@ -19,51 +19,56 @@ export const BugReproducer: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const { state } = useGlobalState();
-    const { vaultState } = state;
     const { requestUnlock, requestCreation } = useVaultModal();
     const { addNotification } = useNotification();
 
-    const handleGenerate = useCallback(async () => {
+    const handleGenerate = useCallback(async (isRetry = false) => {
         if (!stackTrace.trim()) {
             setError('Please provide a stack trace.');
             return;
         }
+
         setIsLoading(true);
         setError('');
-        setGeneratedTest('');
+        if (!isRetry) {
+            setGeneratedTest('');
+        }
 
-        const executeGeneration = async () => {
+        try {
             const stream = generateBugReproductionTestStream(stackTrace, context);
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;
                 setGeneratedTest(fullResponse);
             }
-        };
-
-        try {
-            if (!vaultState.isInitialized) {
-                const created = await requestCreation();
-                if (!created) {
-                    throw new Error('Vault setup is required to use AI features.');
-                }
-            }
-            if (!vaultState.isUnlocked) {
-                const unlocked = await requestUnlock();
-                if (!unlocked) {
-                    throw new Error('Vault must be unlocked to use AI features.');
-                }
-            }
-            await executeGeneration();
+            setIsLoading(false);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            setError(errorMessage);
-            addNotification(errorMessage, 'error');
-        } finally {
+            
+            if (errorMessage.includes('Vault is locked') || errorMessage.includes('API key not found')) {
+                addNotification('Vault access is required to use AI features.', 'info');
+                
+                const isInitialized = await isVaultInitialized();
+                const unlocked = isInitialized
+                    ? await requestUnlock()
+                    : await requestCreation();
+
+                if (unlocked) {
+                    handleGenerate(true); // This recursive call will manage its own isLoading state.
+                    return; // Prevent current execution from proceeding.
+                } else {
+                    const failMessage = 'Vault access was denied.';
+                    setError(failMessage);
+                    addNotification(failMessage, 'error');
+                }
+            } else {
+                setError(errorMessage);
+                addNotification(errorMessage, 'error');
+            }
+            
             setIsLoading(false);
         }
-    }, [stackTrace, context, vaultState, requestCreation, requestUnlock, addNotification]);
+    }, [stackTrace, context, requestCreation, requestUnlock, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
@@ -84,7 +89,7 @@ export const BugReproducer: React.FC = () => {
                         <label htmlFor="context" className="text-sm font-medium mb-2">Relevant Code / Context (Optional)</label>
                         <textarea id="context" value={context} onChange={e => setContext(e.target.value)} className="flex-grow p-2 bg-surface border rounded font-mono text-xs"/>
                     </div>
-                    <button onClick={handleGenerate} disabled={isLoading} className="btn-primary w-full py-3">{isLoading ? <LoadingSpinner/> : 'Generate Test'}</button>
+                    <button onClick={() => handleGenerate()} disabled={isLoading} className="btn-primary w-full py-3">{isLoading ? <LoadingSpinner/> : 'Generate Test'}</button>
                 </div>
                 <div className="flex flex-col">
                     <label className="text-sm font-medium mb-2">Generated Test File</label>

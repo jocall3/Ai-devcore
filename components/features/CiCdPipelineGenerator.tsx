@@ -1,19 +1,10 @@
-import React, { useState } from 'react';
-import { aiService, ICommand, IAiProvider } from '../../services/index.ts';
+import React, { useState, useCallback } from 'react';
+import { generateCiCdConfig } from '../../services/index.ts';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { PaperAirplaneIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
-
-// Command to generate CI/CD config, aligned with the new AI service architecture.
-class GenerateCiCdConfigCommand implements ICommand<string> {
-    constructor(private platform: string, private description: string) {}
-
-    async execute(provider: IAiProvider): Promise<string> {
-        const systemInstruction = `You are a CI/CD expert. Generate a complete and valid configuration file for the specified platform based on the user's description. The output should be a single code block in the appropriate format (e.g., YAML for GitHub Actions). Do not include any explanatory text outside of the code block.`;
-        const prompt = `Platform: ${this.platform}\n\nDescription of stages:\n${this.description}`;
-        // Using a lower temperature for more deterministic code generation.
-        return provider.generateContent(prompt, systemInstruction, 0.3);
-    }
-}
 
 const platforms = ['GitHub Actions', 'GitLab CI', 'CircleCI', 'Jenkins'];
 const exampleDescription = "Install Node.js dependencies, run linting and tests, build the production app, and then deploy to Vercel.";
@@ -25,25 +16,49 @@ export const CiCdPipelineGenerator: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const handleGenerate = async () => {
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
+    const handleGenerate = useCallback(async () => {
         if (!description.trim()) {
             setError('Please provide a description of the pipeline stages.');
             return;
         }
         setIsLoading(true);
         setError('');
+        setConfig('');
+
         try {
-            const command = new GenerateCiCdConfigCommand(platform, description);
-            const result = await aiService.execute(command) as string;
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required for AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked for AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
+            const result = await generateCiCdConfig(platform, description);
             setConfig(result);
+            
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Failed to generate config.';
-            // This now includes vault-related errors like 'Vault is locked.'
             setError(errorMessage);
+            addNotification(errorMessage, 'error');
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [platform, description, vaultState, requestCreation, requestUnlock, addNotification]);
     
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
