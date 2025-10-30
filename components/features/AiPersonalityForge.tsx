@@ -1,4 +1,3 @@
-```typescript
 import React, { useState, useEffect, useRef } from 'react';
 import { PlusIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpOnSquareIcon } from '../icons.tsx';
 import { useAiPersonalities } from '../../hooks/useAiPersonalities.ts';
@@ -191,4 +190,3 @@ export const AiPersonalityForge: React.FC = () => {
         </div>
     );
 };
-```
