@@ -1,9 +1,32 @@
+```typescript
 import React, { useState, useCallback } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { generateColorPalette } from '../../services/aiService.ts';
 import { downloadFile } from '../../services/fileUtils.ts';
 import { SparklesIcon, ArrowDownTrayIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
+
+// Define the expected structure for the AI-generated palette result
+interface ColorValue {
+    value: string;
+}
+
+interface AIGeneratedPalette {
+    palette: {
+        primary: ColorValue;
+        secondary: ColorValue;
+        accent: ColorValue;
+        neutral: ColorValue;
+    };
+    theme: {
+        background: ColorValue;
+        surface: ColorValue;
+        textPrimary: ColorValue;
+        textSecondary: ColorValue;
+        textOnPrimary: ColorValue;
+        border: ColorValue;
+    };
+}
 
 interface PreviewColors {
     cardBg: string;
@@ -14,13 +37,13 @@ interface PreviewColors {
 }
 
 const PreviewCard: React.FC<{ palette: string[], colors: PreviewColors, setColors: React.Dispatch<React.SetStateAction<PreviewColors>> }> = ({ palette, colors, setColors }) => {
-    
+
     const ColorSelector: React.FC<{ label: string, value: string, onChange: (val: string) => void }> = ({ label, value, onChange }) => (
         <div className="flex items-center justify-between text-sm">
             <label className="text-text-primary">{label}</label>
             <div className="flex items-center gap-2">
                 {palette.map(color => (
-                     <button 
+                     <button
                         key={color}
                         onClick={() => onChange(color)}
                         className={`w-5 h-5 rounded-full border border-gray-300 ${value === color ? 'ring-2 ring-primary ring-offset-1' : ''}`}
@@ -31,7 +54,7 @@ const PreviewCard: React.FC<{ palette: string[], colors: PreviewColors, setColor
             </div>
         </div>
     );
-    
+
     return (
         <div className="bg-surface p-4 rounded-lg border border-border w-full max-w-sm">
             <h3 className="text-lg font-bold mb-4 text-text-primary">Live Preview</h3>
@@ -64,12 +87,13 @@ export const ColorPaletteGenerator: React.FC = () => {
     const [previewColors, setPreviewColors] = useState<PreviewColors>({
         cardBg: '#F0F2F5', pillBg: '#CCD3E8', pillText: '#0047AB', buttonBg: '#0047AB', buttonText: '#FFFFFF'
     });
-    
+
     const handleGenerate = useCallback(async () => {
         setIsLoading(true);
         setError('');
         try {
-            const result = await generateColorPalette(baseColor);
+            // Cast the result to the expected AIGeneratedPalette type
+            const result = await generateColorPalette(baseColor) as AIGeneratedPalette;
             const newPalette = [
                 result.palette.primary.value,
                 result.palette.secondary.value,
@@ -99,12 +123,12 @@ export const ColorPaletteGenerator: React.FC = () => {
             setIsLoading(false);
         }
     }, [baseColor]);
-    
+
     const downloadColors = () => {
         const cssContent = `:root {\n${palette.map((c, i) => `  --color-palette-${i+1}: ${c};`).join('\n')}\n}`;
         downloadFile(cssContent, 'palette.css', 'text/css');
     };
-    
+
     const downloadCard = () => {
         const htmlContent = `
 <div class="card">
@@ -183,3 +207,4 @@ export const ColorPaletteGenerator: React.FC = () => {
         </div>
     );
 };
+```
