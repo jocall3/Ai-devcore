@@ -1,11 +1,10 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { GitBranchIcon, ArrowDownTrayIcon } from '../icons.tsx';
-import { generateChangelogFromLogStream } from '../../services/aiService.ts';
+import { generateChangelogFromLogStream, downloadFile } from '../../services/index.ts';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
-import { downloadFile } from '../../services/fileUtils.ts';
 
 const exampleLog = `* commit 3a4b5c6d7e8f9g0h1i2j3k4l5m6n7o8p9q0r (HEAD -> main, origin/main)
-|\\  Merge: 1a2b3c4 2d3e4f5
+|\  Merge: 1a2b3c4 2d3e4f5
 | | Author: Dev One <dev.one@example.com>
 | | Date:   Mon Jul 15 11:30:00 2024 -0400
 | |

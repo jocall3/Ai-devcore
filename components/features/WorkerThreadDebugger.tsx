@@ -1,8 +1,11 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { BugAntIcon, ArrowDownTrayIcon } from '../icons.tsx';
-import { analyzeConcurrencyStream } from '../../services/index.ts';
+import { analyzeConcurrencyStream } from '../../services/aiService.ts';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 import { downloadFile } from '../../services/fileUtils.ts';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const exampleCode = `// main.js
 const worker = new Worker('worker.js');
@@ -43,6 +46,10 @@ export const WorkerThreadDebugger: React.FC<{ codeInput?: string }> = ({ codeInp
     const [analysis, setAnalysis] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
 
     const handleAnalyze = useCallback(async (codeToAnalyze: string) => {
         if (!codeToAnalyze.trim()) {
@@ -52,7 +59,23 @@ export const WorkerThreadDebugger: React.FC<{ codeInput?: string }> = ({ codeInp
         setIsLoading(true);
         setError('');
         setAnalysis('');
+
         try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required for AI features.', 'error');
+                    throw new Error('Vault setup cancelled.');
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked for AI features.', 'info');
+                    throw new Error('Vault unlock cancelled.');
+                }
+            }
+
             const stream = analyzeConcurrencyStream(codeToAnalyze);
             let fullResponse = '';
             for await (const chunk of stream) {
@@ -62,10 +85,11 @@ export const WorkerThreadDebugger: React.FC<{ codeInput?: string }> = ({ codeInp
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
             setError(`Failed to analyze code: ${errorMessage}`);
+            addNotification(`Analysis failed: ${errorMessage}`, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
     useEffect(() => {
         if (initialCode) {
@@ -107,7 +131,7 @@ export const WorkerThreadDebugger: React.FC<{ codeInput?: string }> = ({ codeInp
                     <div className="flex justify-between items-center mb-2">
                         <label className="text-sm font-medium text-text-secondary">AI Analysis</label>
                         {analysis && !isLoading && (
-                             <button onClick={() => downloadFile(analysis, 'analysis.md', 'text/markdown')} className="flex items-center gap-1 px-3 py-1 bg-gray-100 text-xs rounded-md hover:bg-gray-200">
+                             <button onClick={() => downloadFile(analysis, 'analysis.md', 'text/markdown')} className="flex items-center gap-1 px-3 py-1 bg-gray-100 dark:bg-slate-700 text-xs rounded-md hover:bg-gray-200 dark:hover:bg-slate-600">
                                 <ArrowDownTrayIcon className="w-4 h-4"/> Download
                             </button>
                         )}

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { convertJsonToXbrlStream } from '../../services/aiService.ts';
+import { streamContent } from '../../services/index.ts';
 import { XbrlConverterIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 
@@ -32,7 +32,9 @@ export const XbrlConverter: React.FC<{ jsonInput?: string }> = ({ jsonInput: ini
         setError('');
         setXbrlOutput('');
         try {
-            const stream = convertJsonToXbrlStream(jsonToConvert);
+            const prompt = `Convert the following JSON data into a valid, simplified XBRL XML format. The XBRL should represent the financial data contained in the JSON. Do not include any explanatory text, markdown formatting, or code fences—only the raw XML output.\n\nJSON Data:\n\`\`\`json\n${jsonToConvert}\n\`\`\``;
+            const systemInstruction = "You are an API that converts JSON financial data to XBRL XML format.";
+            const stream = streamContent(prompt, systemInstruction);
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;
