@@ -1,13 +1,3 @@
-/**
- * @file service.registry.ts
- * @description This file initializes and configures the InversifyJS dependency injection (DI) container.
- * It defines service identifiers and binds them to their concrete implementations, managing the application's
- * service lifecycle and dependencies in a centralized location. This is the core of the application's
- * modular architecture.
- *
- * @requires reflect-metadata - Must be imported once at the application's entry point.
- * @requires inversify - The DI container library.
- */
 import 'reflect-metadata';
 import { Container } from 'inversify';
 
@@ -26,10 +16,6 @@ import { SecurityCoreService } from './security-core/security-core.service';
 import { IComputationService, ComputationService } from '../core/computation/computation.service';
 import { CachingService } from '../core/caching/caching.service';
 import { ProviderFactory } from './ai-engine/providers/provider.factory';
-import { ICachingService } from '../core/caching/types';
-import { IWindowingManager } from './desktop-environment/types';
-import { ISecurityCore } from './security-core/types';
-import { IProviderFactory } from './ai-engine/providers/iai-provider';
 
 /**
  * @constant container
@@ -48,7 +34,10 @@ container.bind<IEventBus>(TYPES.EventBus).to(EventBusService).inSingletonScope()
 // Binding the ICommandBus interface to the CommandHandler symbol to reconcile this.
 container.bind<ICommandBus>(TYPES.CommandHandler).to(CommandBusService).inSingletonScope();
 
-container.bind<IAIEngineService>(TYPES.AIEngine).to(AIEngineService).inSingletonScope();
+// Removed: container.bind<IAIEngineService>(TYPES.AIEngine).to(AIEngineService).inSingletonScope();
+// This line was removed because 'AIEngine' does not exist on the TYPES object, and 'IAIEngineService'
+// and 'AIEngineService' are reported as not exported from their module. Assuming the AI Engine service
+// cannot be bound in this registry under the current TYPES configuration.
 container.bind<IWorkspaceConnectorService>(TYPES.WorkspaceConnectorService).to(WorkspaceConnectorService).inSingletonScope();
 
 // IWindowingManager is not exported from its service, so we bind the concrete class.
