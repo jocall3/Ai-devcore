@@ -1,4 +1,4 @@
-```typescript
+
 /**
  * @file Barrel file for the services module.
  * This file acts as a facade, exporting all public services and functions.
@@ -338,4 +338,3 @@ export {
 export type {
     ICommand // Re-export ICommand as a type
 } from './aiService';
-```
