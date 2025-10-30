@@ -3,6 +3,8 @@
  * @license Apache-2.0
  */
 
+import type { IAiProvider } from '../providers/iai-provider';
+
 /**
  * Represents a command that can be executed.
  * @template T - The expected return type of the execute method.
@@ -14,19 +16,6 @@ export interface ICommand<T> {
    * @returns The result of the command execution.
    */
   execute(context: { [key: string]: any }): T;
-}
-
-/**
- * @interface IAiProvider
- * @description Defines the contract for an AI provider, abstracting the specific implementation (e.g., Gemini, OpenAI).
- */
-export interface IAiProvider {
-  /**
-   * Generates a commit message based on a provided git diff.
-   * @param diff - The git diff string.
-   * @returns A promise that resolves to the generated commit message string.
-   */
-  generateCommitMessage(diff: string): Promise<string>;
 }
 
 /**
@@ -73,7 +62,7 @@ export class GenerateCommitMessageCommand implements ICommand<Promise<string>> {
    * @example
    * // Assuming a command handler and a configured AI provider
    * const mockAiProvider = {
-   *   generateCommitMessage: async (diff) => Promise.resolve('feat: update greeting message')
+   *   generateContent: async (prompt) => Promise.resolve('feat: update greeting message')
    * };
    * const command = new GenerateCommitMessageCommand('...');
    * const commitMessage = await command.execute({ aiProvider: mockAiProvider });
@@ -85,6 +74,9 @@ export class GenerateCommitMessageCommand implements ICommand<Promise<string>> {
     }
 
     const { aiProvider } = context;
-    return aiProvider.generateCommitMessage(this.diff);
+    const prompt = `Generate a conventional commit message for this diff:\n\n${this.diff}`;
+    const systemInstruction = 'You are an expert at writing conventional commit messages. Respond with only the commit message text, without any markdown formatting like backticks.';
+    
+    return aiProvider.generateContent(prompt, systemInstruction);
   }
 }
