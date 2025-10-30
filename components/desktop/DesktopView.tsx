@@ -7,7 +7,7 @@
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { FeatureDock } from './FeatureDock.tsx';
-import { Window } from './Window.tsx';
+import { Window, type WindowState as WindowComponentState } from './Window.tsx';
 import { Taskbar } from './Taskbar.tsx';
 import { ALL_FEATURES } from '../features/index.tsx';
 import type { Feature } from '../../types.ts';
@@ -23,6 +23,7 @@ import { isVaultInitialized } from '../../services/vaultService.ts';
  * @property {{ width: number; height: number }} size - The width and height of the window.
  * @property {number} zIndex - The z-index for stacking order.
  * @property {boolean} isMinimized - Whether the window is currently minimized to the taskbar.
+ * @property {'normal' | 'maximized'} displayState - The display state of the window.
  */
 interface WindowState {
   id: string;
@@ -30,6 +31,7 @@ interface WindowState {
   size: { width: number; height: number };
   zIndex: number;
   isMinimized: boolean;
+  displayState: 'normal' | 'maximized';
 }
 
 /**
@@ -99,7 +101,6 @@ export const DesktopView: React.FC<DesktopViewProps> = ({ openFeatureId }) => {
                 };
             }
 
-            // Fix: Add type annotation to `w` because the compiler was incorrectly inferring it as `unknown`.
             const openWindowsCount = Object.values(prev).filter((w: WindowState) => !w.isMinimized).length;
             const newWindow: WindowState = {
                 id: featureId,
@@ -107,6 +108,7 @@ export const DesktopView: React.FC<DesktopViewProps> = ({ openFeatureId }) => {
                 size: { width: 800, height: 600 },
                 zIndex: newZIndex,
                 isMinimized: false,
+                displayState: 'normal',
             };
             return { ...prev, [featureId]: newWindow };
         });
@@ -164,16 +166,21 @@ export const DesktopView: React.FC<DesktopViewProps> = ({ openFeatureId }) => {
                 {openWindows.map(win => {
                     const feature = featuresMap.get(win.id);
                     if (!feature) return null;
+                    const windowStateForComponent: WindowComponentState = {
+                        ...win,
+                        isActive: win.id === activeId,
+                    };
                     return (
                         <Window
                             key={win.id}
                             feature={feature}
-                            state={win}
-                            isActive={win.id === activeId}
+                            state={windowStateForComponent}
                             onClose={() => closeWindow(win.id)}
                             onMinimize={() => minimizeWindow(win.id)}
                             onFocus={() => focusWindow(win.id)}
                             onUpdate={updateWindowState}
+                            onMaximize={(id) => updateWindowState(id, { displayState: 'maximized' })}
+                            onRestore={(id) => updateWindowState(id, { displayState: 'normal' })}
                         />
                     );
                 })}

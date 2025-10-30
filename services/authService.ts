@@ -4,7 +4,7 @@
  * and validating tokens. It does not manage state or directly handle credential storage.
  */
 
-import { Octokit } from 'octokit';
+import { Octokit } from '@octokit/rest';
 import type { GitHubUser as User } from '../types.ts';
 import { logEvent } from './telemetryService.ts';
 

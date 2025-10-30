@@ -1,13 +1,17 @@
 import React, { useState, useCallback } from 'react';
 import { Type, type FunctionDeclaration } from "@google/genai";
 import { logError } from '../../services/telemetryService.ts';
-import { getInferenceFunction, CommandResponse } from '../../services/aiService.ts';
 import { FEATURE_TAXONOMY } from '../../services/taxonomyService.ts';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 import { CommandLineIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { ALL_FEATURE_IDS } from '../../constants.tsx';
 import { executeWorkspaceAction, ACTION_REGISTRY } from '../../services/workspaceConnectorService.ts';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
+import { getDecryptedCredential } from '../../services/vaultService.ts';
+import { GeminiProvider } from '../../services/geminiService.ts';
+import type { CommandResponse } from '../../services/geminiService.ts';
 
 const baseFunctionDeclarations: FunctionDeclaration[] = [
     {
@@ -92,10 +96,37 @@ const ExamplePromptButton: React.FC<{ text: string, onClick: (text: string) => v
 )
 
 export const AiCommandCenter: React.FC = () => {
-    const { dispatch } = useGlobalState();
+    const { state, dispatch } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
     const [prompt, setPrompt] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [lastResponse, setLastResponse] = useState('');
+
+    const getProvider = useCallback(async () => {
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (!created) {
+                addNotification('Vault setup is required for AI commands.', 'error');
+                return null;
+            }
+        }
+        if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (!unlocked) {
+                addNotification('Vault must be unlocked for AI commands.', 'info');
+                return null;
+            }
+        }
+        const apiKey = await getDecryptedCredential('gemini_api_key');
+        if (!apiKey) {
+            addNotification('Gemini API key not found in vault.', 'error');
+            return null;
+        }
+        return new GeminiProvider(apiKey);
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
+
 
     const handleCommand = useCallback(async () => {
         if (!prompt.trim()) return;
@@ -104,7 +135,13 @@ export const AiCommandCenter: React.FC = () => {
         setLastResponse('');
 
         try {
-            const response: CommandResponse = await getInferenceFunction(prompt, functionDeclarations, knowledgeBase);
+            const provider = await getProvider();
+            if (!provider) {
+                setIsLoading(false);
+                return;
+            }
+            
+            const response: CommandResponse = await provider.getInferenceFunction(prompt, functionDeclarations, knowledgeBase);
             
             if (response.functionCalls && response.functionCalls.length > 0) {
                 const call = response.functionCalls[0];
@@ -141,7 +178,7 @@ export const AiCommandCenter: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [prompt, dispatch]);
+    }, [prompt, dispatch, getProvider]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {

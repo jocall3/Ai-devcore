@@ -113,7 +113,7 @@ export const CreateMasterPasswordModal: React.FC<Props> = ({ onSuccess, onCancel
                     </div>
                     {error && <p className="text-red-500 text-sm">{error}</p>}
                     <div className="flex justify-end gap-2 pt-2">
-                        <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-100 rounded-md">Cancel</button>
+                        <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-100 dark:bg-slate-700 rounded-md hover:bg-gray-200 dark:hover:bg-slate-600">Cancel</button>
                         <button type="submit" disabled={isLoading} className="btn-primary px-4 py-2 min-w-[120px] flex justify-center">
                             {isLoading ? <LoadingSpinner /> : 'Create Vault'}
                         </button>

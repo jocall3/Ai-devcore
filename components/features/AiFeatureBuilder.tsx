@@ -1,8 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import type { GeneratedFile } from '../../types.ts';
-import { generateFeature, generateFullStackFeature, generateUnitTestsStream, generateCommitMessageStream, generateDockerfile } from '../../services/aiService.ts';
+import { generateFeature, generateFullStackFeature, generateUnitTestsStream, generateCommitMessageStream, generateDockerfile } from '../../services/index.ts';
 import { saveFile, getAllFiles, clearAllFiles } from '../../services/dbService.ts';
-import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { CpuChipIcon, DocumentTextIcon, BeakerIcon, GitBranchIcon, CloudIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 
@@ -49,11 +48,11 @@ export const AiFeatureBuilder: React.FC = () => {
             setGeneratedFiles(resultFiles);
 
             if (resultFiles.length > 0) {
-                const componentFile = resultFiles.find(f => f.filePath.endsWith('.tsx') || f.filePath.endsWith('.jsx'));
+                const componentFile = resultFiles.find((f: GeneratedFile) => f.filePath.endsWith('.tsx') || f.filePath.endsWith('.jsx'));
                 setActiveTab(componentFile || resultFiles[0]);
 
                 const testStream = generateUnitTestsStream(componentFile?.content || resultFiles[0].content);
-                const diffContext = resultFiles.map(f => `File: ${f.filePath}\n\n${f.content}`).join('\n---\n');
+                const diffContext = resultFiles.map((f: GeneratedFile) => `File: ${f.filePath}\n\n${f.content}`).join('\n---\n');
                 const commitStream = generateCommitMessageStream(diffContext);
                 
                 let tests = ''; for await (const chunk of testStream) { tests += chunk; setUnitTests(tests); }

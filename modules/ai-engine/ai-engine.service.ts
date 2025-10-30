@@ -1,298 +1,199 @@
 /**
- * @fileoverview Defines the AIEngineService, the primary entry point for all AI-related
+ * @fileoverview Defines the AIEngine, the primary entry point for all AI-related
  * operations. It acts as a facade, delegating computationally intensive tasks to a
  * worker-based ComputationService, adhering to the modular monolith architecture.
- * @version 1.0.0
+ * @version 2.0.0
  * @license SPDX-License-Identifier: Apache-2.0
  */
 
-// NOTE: 'inversify' and other module paths are assumed to be configured in the project's tsconfig.
 import { injectable, inject } from 'inversify';
-import { TYPES } from '../../core/types';
-import type { IComputationService } from '../computation/computation.service.interface';
-import type { IAIEngineService } from './ai-engine.service.interface';
-import type { GeneratedFile, StructuredPrSummary, StructuredExplanation, SemanticColorTheme, SecurityVulnerability, CodeSmell, CustomFeature, CommandResponse } from '../../types';
+import 'reflect-metadata';
+import { TYPES } from '../../core/di/types';
+import type { IComputationService } from '../../core/computation/computation.service';
+import type { GeneratedFile, StructuredPrSummary, StructuredExplanation, SemanticColorTheme, SecurityVulnerability, CodeSmell, CustomFeature } from '../../types';
 import type { FunctionDeclaration } from '@google/genai';
 
-// Commands are assumed to be defined in a central place within the module.
-// These classes would encapsulate the logic and parameters for each AI operation.
-import {
-  AnalyzeConcurrencyCommand,
-  AnalyzeCodeForVulnerabilitiesCommand,
-  AnalyzePerformanceTraceCommand,
-  ApplySpecificRefactorCommand,
-  ConvertCssToTailwindCommand,
-  ConvertToFunctionalComponentCommand,
-  ConvertJsonToXbrlCommand,
-  CreateApiDocumentationCommand,
-  DebugErrorCommand,
-  DetectCodeSmellsCommand,
-  EnhanceSnippetCommand,
-  ExplainCodeStructuredCommand,
-  ExplainRegexCommand,
-  FormatCodeCommand,
-  GenerateAppFeatureComponentCommand,
-  GenerateBugReproductionTestCommand,
-  GenerateChangelogFromLogCommand,
-  GenerateCiCdConfigCommand,
-  GenerateClientFromApiSchemaCommand,
-  GenerateCodingChallengeCommand,
-  GenerateCommitMessageCommand,
-  GenerateComponentFromImageCommand,
-  GenerateContentCommand,
-  GenerateCronFromDescriptionCommand,
-  GenerateDockerfileCommand,
-  GenerateFeatureCommand,
-  GenerateFullStackFeatureCommand,
-  GenerateImageCommand,
-  GenerateImageFromImageAndTextCommand,
-  GenerateIamPolicyCommand,
-  GenerateJsDocCommand,
-  GenerateJsonCommand,
-  GenerateMermaidJsCommand,
-  GenerateMockDataCommand,
-  GeneratePipelineCodeCommand,
-  GeneratePrSummaryStructuredCommand,
-  GenerateRegExCommand,
-  GenerateSemanticThemeCommand,
-  GenerateTagsForCodeCommand,
-  GenerateTechnicalSpecFromDiffCommand,
-  GenerateTerraformConfigCommand,
-  GenerateUnitTestsCommand,
-  GenerateWeeklyDigestCommand,
-  GetInferenceFunctionCommand,
-  JsonToTypescriptInterfaceCommand,
-  MigrateCodeCommand,
-  RefactorForPerformanceCommand,
-  RefactorForReadabilityCommand,
-  ReviewCodeCommand,
-  SqlToApiEndpointsCommand,
-  StreamContentCommand,
-  SuggestA11yFixCommand,
-  SuggestAlternativeLibrariesCommand,
-  SummarizeNotesCommand,
-  TransferCodeStyleCommand,
-  TranscribeAudioToCodeCommand,
-  TranslateCommentsCommand
-} from './commands';
+// This interface is missing from its own file. Defining it here for type safety.
+// In a full refactor, this would move to './i-ai-engine.service.ts'.
+export interface IAIEngine {
+  streamContent(prompt: string | { parts: any[] }, systemInstruction: string, temperature?: number): Promise<any>;
+  generateContent(prompt: string, systemInstruction: string, temperature?: number): Promise<string>;
+  generateJson<T>(prompt: any, systemInstruction: string, schema: any, temperature?: number): Promise<T>;
+  generateAppFeatureComponent(prompt: string): Promise<Omit<CustomFeature, 'id'>>;
+  explainCodeStructured(code: string): Promise<StructuredExplanation>;
+  generatePrSummaryStructured(diff: string): Promise<StructuredPrSummary>;
+  generateFeature(prompt: string, framework: string, styling: string): Promise<GeneratedFile[]>;
+  generateFullStackFeature(prompt: string, framework: string, styling: string): Promise<GeneratedFile[]>;
+  detectCodeSmells(code: string): Promise<CodeSmell[]>;
+  getInferenceFunction(prompt: string, functionDeclarations: FunctionDeclaration[], knowledgeBase: string): Promise<CommandResponse>;
+  generateImage(prompt: string): Promise<string>;
+  generateImageFromImageAndText(prompt: string, base64Image: string, mimeType: string): Promise<string>;
+  analyzeCodeForVulnerabilities(code: string): Promise<SecurityVulnerability[]>;
+  generateTechnicalSpecFromDiff(diff: string, summary: StructuredPrSummary): Promise<string>;
+  generateSemanticTheme(prompt: { parts: any[] }): Promise<SemanticColorTheme>;
+  generateCommitMessageStream(diff: string): Promise<any>;
+  generateUnitTestsStream(code: string): Promise<any>;
+  generateBugReproductionTestStream(stackTrace: string, context?: string): Promise<any>;
+  migrateCodeStream(code: string, from: string, to: string): Promise<any>;
+  analyzeConcurrencyStream(code: string): Promise<any>;
+  debugErrorStream(error: Error): Promise<any>;
+  generateChangelogFromLogStream(log: string): Promise<any>;
+  generateIamPolicyStream(description: string, platform: 'aws' | 'gcp'): Promise<any>;
+  generateRegExStream(prompt: string): Promise<any>;
+  formatCodeStream(code: string): Promise<any>;
+  generateComponentFromImageStream(base64Image: string): Promise<any>;
+  transcribeAudioToCodeStream(base64Audio: string, mimeType: string): Promise<any>;
+  transferCodeStyleStream(options: { code: string; styleGuide: string; }): Promise<any>;
+  generateCodingChallengeStream(topic: string | null): Promise<any>;
+  reviewCodeStream(code: string, systemInstruction?: string): Promise<any>;
+  enhanceSnippetStream(snippet: string): Promise<any>;
+  summarizeNotesStream(notes: string): Promise<any>;
+}
 
-/**
- * @class AIEngineService
- * @description The main service for interacting with the AI engine.
- * This service implements the Command Pattern by creating command objects for each AI operation
- * and dispatching them to the ComputationService. This ensures that all AI-related processing
- * happens off the main thread, keeping the UI responsive. It also acts as a clean facade,
- * abstracting away the complexities of command creation and execution.
- *
- * This new architecture implicitly resolves issues with vault access, as the responsibility for
- * retrieving API keys is delegated to the worker threads, which communicate with a dedicated
- * Security Core worker. This service does not handle credentials directly, fixing the problem
- * where a locked vault would block AI operations on the main thread.
- *
- * @implements {IAIEngineService}
- * @example
- * ```typescript
- * const aiEngineService = container.get<IAIEngineService>(TYPES.AIEngineService);
- * const explanation = await aiEngineService.explainCodeStructured('const x = 1;');
- * console.log(explanation.summary);
- * ```
- */
+// This type is missing from the global types.ts. Defining it here for local correctness.
+export interface CommandResponse {
+    text: string;
+    functionCalls?: { name: string; args: any; }[];
+}
+
 @injectable()
-export class AIEngineService implements IAIEngineService {
-  /**
-   * @private
-   * @type {IComputationService}
-   * @description The service responsible for executing commands in a worker thread.
-   */
+export class AIEngine implements IAIEngine {
   private readonly computationService: IComputationService;
 
-  /**
-   * @constructor
-   * @param {IComputationService} computationService - The injected computation service from the DI container.
-   */
   public constructor(
     @inject(TYPES.ComputationService) computationService: IComputationService
   ) {
     this.computationService = computationService;
   }
 
-  /**
-   * @inheritdoc
-   */
-  public streamContent(prompt: string | { parts: any[] }, systemInstruction: string, temperature = 0.5): AsyncGenerator<string> {
-    const command = new StreamContentCommand(prompt, systemInstruction, temperature);
-    return this.computationService.executeStream(command);
+  public streamContent(prompt: string | { parts: any[] }, systemInstruction: string, temperature = 0.5): Promise<any> {
+    return this.computationService.execute('streamContent', prompt, systemInstruction, temperature);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async generateContent(prompt: string, systemInstruction: string, temperature = 0.5): Promise<string> {
-    const command = new GenerateContentCommand(prompt, systemInstruction, temperature);
-    return this.computationService.execute(command);
+  public generateContent(prompt: string, systemInstruction: string, temperature = 0.5): Promise<string> {
+    return this.computationService.execute('generateContent', prompt, systemInstruction, temperature);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async generateJson<T>(prompt: any, systemInstruction: string, schema: any, temperature = 0.2): Promise<T> {
-    const command = new GenerateJsonCommand<T>(prompt, systemInstruction, schema, temperature);
-    return this.computationService.execute(command);
+  public generateJson<T>(prompt: any, systemInstruction: string, schema: any, temperature = 0.2): Promise<T> {
+    return this.computationService.execute('generateJson', prompt, systemInstruction, schema, temperature);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async generateAppFeatureComponent(prompt: string): Promise<Omit<CustomFeature, 'id'>> {
-    const command = new GenerateAppFeatureComponentCommand(prompt);
-    return this.computationService.execute(command);
+  public generateAppFeatureComponent(prompt: string): Promise<Omit<CustomFeature, 'id'>> {
+    return this.computationService.execute('generateAppFeatureComponent', prompt);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async explainCodeStructured(code: string): Promise<StructuredExplanation> {
-    const command = new ExplainCodeStructuredCommand(code);
-    return this.computationService.execute(command);
+  public explainCodeStructured(code: string): Promise<StructuredExplanation> {
+    return this.computationService.execute('explainCodeStructured', code);
   }
   
-  /**
-   * @inheritdoc
-   */
-  public async generatePrSummaryStructured(diff: string): Promise<StructuredPrSummary> {
-    const command = new GeneratePrSummaryStructuredCommand(diff);
-    return this.computationService.execute(command);
+  public generatePrSummaryStructured(diff: string): Promise<StructuredPrSummary> {
+    return this.computationService.execute('generatePrSummaryStructured', diff);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async generateFeature(prompt: string, framework: string, styling: string): Promise<GeneratedFile[]> {
-    const command = new GenerateFeatureCommand(prompt, framework, styling);
-    return this.computationService.execute(command);
+  public generateFeature(prompt: string, framework: string, styling: string): Promise<GeneratedFile[]> {
+    return this.computationService.execute('generateFeature', prompt, framework, styling);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async generateFullStackFeature(prompt: string, framework: string, styling: string): Promise<GeneratedFile[]> {
-    const command = new GenerateFullStackFeatureCommand(prompt, framework, styling);
-    return this.computationService.execute(command);
+  public generateFullStackFeature(prompt: string, framework: string, styling: string): Promise<GeneratedFile[]> {
+    return this.computationService.execute('generateFullStackFeature', prompt, framework, styling);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async detectCodeSmells(code: string): Promise<CodeSmell[]> {
-    const command = new DetectCodeSmellsCommand(code);
-    return this.computationService.execute(command);
+  public detectCodeSmells(code: string): Promise<CodeSmell[]> {
+    return this.computationService.execute('detectCodeSmells', code);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async getInferenceFunction(prompt: string, functionDeclarations: FunctionDeclaration[], knowledgeBase: string): Promise<CommandResponse> {
-    const command = new GetInferenceFunctionCommand(prompt, functionDeclarations, knowledgeBase);
-    return this.computationService.execute(command);
+  public getInferenceFunction(prompt: string, functionDeclarations: FunctionDeclaration[], knowledgeBase: string): Promise<CommandResponse> {
+    return this.computationService.execute('getInferenceFunction', prompt, functionDeclarations, knowledgeBase);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async generateImage(prompt: string): Promise<string> {
-    const command = new GenerateImageCommand(prompt);
-    return this.computationService.execute(command);
+  public generateImage(prompt: string): Promise<string> {
+    return this.computationService.execute('generateImage', prompt);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async analyzeCodeForVulnerabilities(code: string): Promise<SecurityVulnerability[]> {
-    const command = new AnalyzeCodeForVulnerabilitiesCommand(code);
-    return this.computationService.execute(command);
+  public generateImageFromImageAndText(prompt: string, base64Image: string, mimeType: string): Promise<string> {
+    return this.computationService.execute('generateImageFromImageAndText', prompt, base64Image, mimeType);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async generateTechnicalSpecFromDiff(diff: string, summary: StructuredPrSummary): Promise<string> {
-    const command = new GenerateTechnicalSpecFromDiffCommand(diff, summary);
-    return this.computationService.execute(command);
+  public analyzeCodeForVulnerabilities(code: string): Promise<SecurityVulnerability[]> {
+    return this.computationService.execute('analyzeCodeForVulnerabilities', code);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public async generateSemanticTheme(prompt: { parts: any[] }): Promise<SemanticColorTheme> {
-    const command = new GenerateSemanticThemeCommand(prompt);
-    return this.computationService.execute(command);
+  public generateTechnicalSpecFromDiff(diff: string, summary: StructuredPrSummary): Promise<string> {
+    return this.computationService.execute('generateTechnicalSpecFromDiff', diff, summary);
   }
 
-  // --- Streaming Methods --- 
-
-  /**
-   * @inheritdoc
-   */
-  public generateCommitMessageStream(diff: string): AsyncGenerator<string> {
-    const command = new GenerateCommitMessageCommand(diff);
-    return this.computationService.executeStream(command);
+  public generateSemanticTheme(prompt: { parts: any[] }): Promise<SemanticColorTheme> {
+    return this.computationService.execute('generateSemanticTheme', prompt);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public generateUnitTestsStream(code: string): AsyncGenerator<string> {
-    const command = new GenerateUnitTestsCommand(code);
-    return this.computationService.executeStream(command);
+  // --- Streaming Methods (wrapped in Promise as per IComputationService) --- 
+
+  public generateCommitMessageStream(diff: string): Promise<any> {
+    return this.computationService.execute('generateCommitMessageStream', diff);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public generateBugReproductionTestStream(stackTrace: string, context?: string): AsyncGenerator<string> {
-    const command = new GenerateBugReproductionTestCommand(stackTrace, context);
-    return this.computationService.executeStream(command);
+  public generateUnitTestsStream(code: string): Promise<any> {
+    return this.computationService.execute('generateUnitTestsStream', code);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public migrateCodeStream(code: string, from: string, to: string): AsyncGenerator<string> {
-    const command = new MigrateCodeCommand(code, from, to);
-    return this.computationService.executeStream(command);
+  public generateBugReproductionTestStream(stackTrace: string, context?: string): Promise<any> {
+    return this.computationService.execute('generateBugReproductionTestStream', stackTrace, context);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public analyzeConcurrencyStream(code: string): AsyncGenerator<string> {
-    const command = new AnalyzeConcurrencyCommand(code);
-    return this.computationService.executeStream(command);
+  public migrateCodeStream(code: string, from: string, to: string): Promise<any> {
+    return this.computationService.execute('migrateCodeStream', code, from, to);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public debugErrorStream(error: Error): AsyncGenerator<string> {
-    // Error objects are not serializable, so we pass their properties.
+  public analyzeConcurrencyStream(code: string): Promise<any> {
+    return this.computationService.execute('analyzeConcurrencyStream', code);
+  }
+
+  public debugErrorStream(error: Error): Promise<any> {
     const errorData = { message: error.message, stack: error.stack };
-    const command = new DebugErrorCommand(errorData);
-    return this.computationService.executeStream(command);
+    return this.computationService.execute('debugErrorStream', errorData);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public generateChangelogFromLogStream(log: string): AsyncGenerator<string> {
-    const command = new GenerateChangelogFromLogCommand(log);
-    return this.computationService.executeStream(command);
+  public generateChangelogFromLogStream(log: string): Promise<any> {
+    return this.computationService.execute('generateChangelogFromLogStream', log);
   }
 
-  /**
-   * @inheritdoc
-   */
-  public generateIamPolicyStream(description: string, platform: 'aws' | 'gcp'): AsyncGenerator<string> {
-    const command = new GenerateIamPolicyCommand(description, platform);
-    return this.computationService.executeStream(command);
+  public generateIamPolicyStream(description: string, platform: 'aws' | 'gcp'): Promise<any> {
+    return this.computationService.execute('generateIamPolicyStream', description, platform);
+  }
+
+  public generateRegExStream(prompt: string): Promise<any> {
+    return this.computationService.execute('generateRegExStream', prompt);
+  }
+
+  public formatCodeStream(code: string): Promise<any> {
+    return this.computationService.execute('formatCodeStream', code);
+  }
+
+  public generateComponentFromImageStream(base64Image: string): Promise<any> {
+    return this.computationService.execute('generateComponentFromImageStream', base64Image);
+  }
+
+  public transcribeAudioToCodeStream(base64Audio: string, mimeType: string): Promise<any> {
+    return this.computationService.execute('transcribeAudioToCodeStream', base64Audio, mimeType);
+  }
+
+  public transferCodeStyleStream(options: { code: string; styleGuide: string; }): Promise<any> {
+    return this.computationService.execute('transferCodeStyleStream', options);
+  }
+
+  public generateCodingChallengeStream(topic: string | null): Promise<any> {
+    return this.computationService.execute('generateCodingChallengeStream', topic);
+  }
+
+  public reviewCodeStream(code: string, systemInstruction?: string): Promise<any> {
+    return this.computationService.execute('reviewCodeStream', code, systemInstruction);
+  }
+
+  public enhanceSnippetStream(snippet: string): Promise<any> {
+    return this.computationService.execute('enhanceSnippetStream', snippet);
+  }
+
+  public summarizeNotesStream(notes: string): Promise<any> {
+    return this.computationService.execute('summarizeNotesStream', notes);
   }
 }

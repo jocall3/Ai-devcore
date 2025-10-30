@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { SparklesIcon, ArrowDownTrayIcon, PhotoIcon } from '../icons.tsx';
-import { generateSemanticTheme } from '../../services/index.ts';
+import { SparklesIcon, PhotoIcon } from '../icons.tsx';
+import { generateSemanticTheme } from '../../services/aiService.ts';
 import { fileToBase64 } from '../../services/fileUtils.ts';
 import type { SemanticColorTheme, ColorTheme } from '../../types.ts';
 import { LoadingSpinner } from '../shared/index.tsx';

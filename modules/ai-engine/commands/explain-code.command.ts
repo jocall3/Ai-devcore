@@ -3,13 +3,21 @@
  * @license SPDX-License-Identifier: Apache-2.0
  */
 
-import { inject, injectable } from 'inversify';
-import 'reflect-metadata';
-import { Type } from '@google/genai';
-import { AIEngineSymbols } from '../constants/symbols';
-import { ICommand } from '../../shared/interfaces/i-command.interface';
-import { IAiProvider } from '../providers/i-ai-provider.interface';
-import { StructuredExplanation } from '../types/structured-explanation.type';
+import { Type } from "@google/genai";
+import type { IAiProvider } from '../providers/iai-provider';
+import type { StructuredExplanation } from '../../../types';
+
+// NOTE: This command is implemented as an executable class. This pattern is being phased out
+// in favor of DTO commands processed by a central handler. This file is kept for compatibility
+// until the refactor is complete.
+
+/**
+ * A local definition of an executable command interface to ensure this module compiles
+ * during the ongoing architectural refactor.
+ */
+export interface ICommand<TPayload, TResult> {
+  execute(payload: TPayload): Promise<TResult>;
+}
 
 /**
  * @interface ExplainCodePayload
@@ -32,40 +40,16 @@ export type ExplainCodeResult = StructuredExplanation;
  * @class ExplainCodeCommand
  * @implements ICommand<ExplainCodePayload, ExplainCodeResult>
  * @description A command to encapsulate the logic for explaining a code snippet.
- * It uses an injected AI provider to perform the analysis and returns a structured explanation.
- * This class adheres to the Command Pattern, decoupling the requester of the action
- * from the object that performs the action.
- *
- * @example
- * ```typescript
- * // In the DI container setup
- * container.bind<ICommand<ExplainCodePayload, ExplainCodeResult>>(AIEngineSymbols.ExplainCodeCommand).to(ExplainCodeCommand);
- *
- * // In a service or command handler
- * const explainCodeCommand = container.get<ICommand<ExplainCodePayload, ExplainCodeResult>>(AIEngineSymbols.ExplainCodeCommand);
- * const codeToExplain = "const x = 1;";
- * const explanation = await explainCodeCommand.execute({ code: codeToExplain });
- * console.log(explanation.summary);
- * ```
+ * It uses an AI provider to perform the analysis and returns a structured explanation.
  */
-@injectable()
 export class ExplainCodeCommand implements ICommand<ExplainCodePayload, ExplainCodeResult> {
-  /**
-   * @private
-   * @readonly
-   * @type {IAiProvider}
-   * @description The AI provider used for generating the code explanation.
-   */
   private readonly aiProvider: IAiProvider;
 
   /**
    * @constructor
    * @param {IAiProvider} aiProvider - An instance of an AI provider that conforms to the IAiProvider interface.
-   * This dependency is injected by the DI container.
    */
-  public constructor(
-    @inject(AIEngineSymbols.AiProvider) aiProvider: IAiProvider
-  ) {
+  public constructor(aiProvider: IAiProvider) {
     this.aiProvider = aiProvider;
   }
 
@@ -76,13 +60,6 @@ export class ExplainCodeCommand implements ICommand<ExplainCodePayload, ExplainC
    * @param {ExplainCodePayload} payload - The payload containing the code to be explained.
    * @returns {Promise<ExplainCodeResult>} A promise that resolves to the structured explanation of the code.
    * @throws {Error} Throws an error if the AI provider fails to generate the explanation.
-   *
-   * @example
-   * ```typescript
-   * const command = new ExplainCodeCommand(myAiProvider);
-   * const result = await command.execute({ code: 'const sum = (a, b) => a + b;' });
-   * // result will be of type StructuredExplanation
-   * ```
    */
   public async execute(payload: ExplainCodePayload): Promise<ExplainCodeResult> {
     const { code } = payload;
@@ -142,10 +119,10 @@ export class ExplainCodeCommand implements ICommand<ExplainCodePayload, ExplainC
       required: ["summary", "lineByLine", "complexity", "suggestions"]
     };
 
-    const explanation = await this.aiProvider.generateStructuredContent<ExplainCodeResult>(
+    const explanation = await this.aiProvider.generateJson<ExplainCodeResult>(
       prompt,
-      systemInstruction,
-      schema
+      schema,
+      systemInstruction
     );
 
     return explanation;

@@ -1,10 +1,10 @@
-
-
 import React, { useState, useCallback, useEffect } from 'react';
-import { migrateCodeStream } from '../../services/index.ts';
+import { streamContent } from '../../services/index.ts';
 import { ArrowPathIcon } from '../icons.tsx';
-import { LoadingSpinner } from '../shared/index.tsx';
-import { MarkdownRenderer } from '../shared/index.tsx';
+import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 
 const languages = ['SASS', 'CSS', 'JavaScript', 'TypeScript', 'Python', 'Go', 'React', 'Vue', 'Angular', 'Tailwind CSS'];
 
@@ -23,29 +23,51 @@ export const AiCodeMigrator: React.FC<{ inputCode?: string, fromLang?: string, t
     const [toLang, setToLang] = useState(initialTo || 'CSS');
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
+    const withVault = useCallback(async (callback: () => Promise<void>) => {
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (!created) { addNotification('Vault setup is required to use AI features.', 'error'); return; }
+        }
+        if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (!unlocked) { addNotification('Vault must be unlocked to use AI features.', 'error'); return; }
+        }
+        await callback();
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
     const handleMigrate = useCallback(async (code: string, from: string, to: string) => {
         if (!code.trim()) {
             setError('Please enter some code to migrate.');
             return;
         }
-        setIsLoading(true);
-        setError('');
-        setOutputCode('');
-        try {
-            const stream = migrateCodeStream(code, from, to);
-            let fullResponse = '';
-            for await (const chunk of stream) {
-                fullResponse += chunk;
-                setOutputCode(fullResponse);
+
+        await withVault(async () => {
+            setIsLoading(true);
+            setError('');
+            setOutputCode('');
+            try {
+                const systemInstruction = `You are an expert code migration tool. Your task is to accurately translate the provided code snippet from ${from} to ${to}. Maintain the original logic and structure as much as possible, but adapt to the new language's or framework's conventions and best practices. Respond ONLY with the migrated code inside a single markdown code block. Do not add any explanations or introductory text.`;
+                const prompt = `Migrate the following code from ${from} to ${to}:\n\n\`\`\`${from.toLowerCase()}\n${code}\n\`\`\``;
+                const stream = streamContent(prompt, systemInstruction, 0.2);
+                let fullResponse = '';
+                for await (const chunk of stream) {
+                    fullResponse += chunk;
+                    setOutputCode(fullResponse);
+                }
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+                setError(`Failed to migrate code: ${errorMessage}`);
+                addNotification(errorMessage, 'error');
+            } finally {
+                setIsLoading(false);
             }
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            setError(`Failed to migrate code: ${errorMessage}`);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
+        });
+    }, [withVault, addNotification]);
 
     useEffect(() => {
         if (initialCode && initialFrom && initialTo) {

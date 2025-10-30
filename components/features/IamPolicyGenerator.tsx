@@ -1,5 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { generateIamPolicyStream } from '../../services/aiService.ts';
+import { generateIamPolicyStream } from '../../services/index.ts';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { ShieldCheckIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 
@@ -10,27 +13,58 @@ export const IamPolicyGenerator: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
     const handleGenerate = useCallback(async () => {
         if (!description.trim()) {
             setError('Please provide a description.');
             return;
         }
+
         setIsLoading(true);
         setError('');
         setPolicy('');
-        try {
-            const stream = generateIamPolicyStream(description, platform);
-            let fullResponse = '';
-            for await (const chunk of stream) {
-                fullResponse += chunk;
-                setPolicy(fullResponse);
+
+        const runGeneration = async () => {
+            try {
+                const stream = generateIamPolicyStream(description, platform);
+                let fullResponse = '';
+                for await (const chunk of stream) {
+                    fullResponse += chunk;
+                    setPolicy(fullResponse);
+                }
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+                setError(`Failed to generate policy: ${errorMessage}`);
+                addNotification(errorMessage, 'error');
+            } finally {
+                setIsLoading(false);
             }
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-        } finally {
-            setIsLoading(false);
+        };
+
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (created) {
+                await runGeneration();
+            } else {
+                addNotification('Vault setup is required to use AI features.', 'error');
+                setIsLoading(false);
+            }
+        } else if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (unlocked) {
+                await runGeneration();
+            } else {
+                addNotification('Vault must be unlocked to use AI features.', 'info');
+                setIsLoading(false);
+            }
+        } else {
+            await runGeneration();
         }
-    }, [description, platform]);
+    }, [description, platform, vaultState.isInitialized, vaultState.isUnlocked, requestCreation, requestUnlock, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
@@ -46,8 +80,8 @@ export const IamPolicyGenerator: React.FC = () => {
                      <div>
                         <label htmlFor="platform" className="text-sm font-medium mb-2 block">Cloud Platform</label>
                         <div className="flex gap-2 p-1 bg-surface rounded-lg border">
-                            <button onClick={() => setPlatform('aws')} className={`flex-1 py-2 rounded-md text-sm ${platform === 'aws' ? 'bg-primary text-text-on-primary' : ''}`}>AWS</button>
-                            <button onClick={() => setPlatform('gcp')} className={`flex-1 py-2 rounded-md text-sm ${platform === 'gcp' ? 'bg-primary text-text-on-primary' : ''}`}>GCP</button>
+                            <button onClick={() => setPlatform('aws')} className={`flex-1 py-2 rounded-md text-sm ${platform === 'aws' ? 'bg-primary text-text-on-primary' : 'hover:bg-gray-100 dark:hover:bg-slate-700'}`}>AWS</button>
+                            <button onClick={() => setPlatform('gcp')} className={`flex-1 py-2 rounded-md text-sm ${platform === 'gcp' ? 'bg-primary text-text-on-primary' : 'hover:bg-gray-100 dark:hover:bg-slate-700'}`}>GCP</button>
                         </div>
                     </div>
                     <div className="flex flex-col flex-1 min-h-0">
@@ -60,7 +94,7 @@ export const IamPolicyGenerator: React.FC = () => {
                     <label className="text-sm font-medium mb-2">Generated Policy (JSON)</label>
                     <div className="flex-grow p-1 bg-background border rounded overflow-auto">
                         {isLoading && !policy && <div className="flex justify-center items-center h-full"><LoadingSpinner /></div>}
-                        {error && <p className="text-red-500 p-4">{error}</p>}
+                        {error && <p className="p-4 text-red-500">{error}</p>}
                         {policy && <MarkdownRenderer content={policy} />}
                     </div>
                 </div>

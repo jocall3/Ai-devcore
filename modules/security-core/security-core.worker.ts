@@ -11,8 +11,9 @@
 
 /// <reference lib="webworker" />
 
-import type { SecurityCoreRequest, SecurityCoreResponse, EncryptedData, VaultCanary } from './security-core.types.ts';
-import * as crypto from './crypto.ts';
+import type { EncryptedData } from '../../types';
+
+// --- STATE & CONSTANTS ---
 
 /**
  * The in-memory cryptographic key used for the current session. It is null when the vault is locked.
@@ -20,151 +21,146 @@ import * as crypto from './crypto.ts';
  */
 let sessionKey: CryptoKey | null = null;
 
-/**
- * The timer ID for the inactivity auto-lock mechanism.
- * @type {number | null}
- */
-let inactivityTimer: number | null = null;
+// --- CRYPTOGRAPHIC IMPLEMENTATIONS ---
+// These functions are defined directly in the worker to ensure they are fully sandboxed.
+
+const PBKDF2_ITERATIONS = 250000;
+const PBKDF2_HASH = 'SHA-256';
+const AES_ALGORITHM = 'AES-GCM';
+const AES_KEY_LENGTH = 256;
+const AES_IV_LENGTH_BYTES = 12; // 96 bits is recommended for AES-GCM
 
 /**
- * The duration of inactivity in milliseconds before the vault automatically locks.
- * @constant
- * @type {number}
- * @example 30 minutes
+ * Generates a cryptographically secure random salt.
+ * @returns {ArrayBuffer} A new salt.
  */
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
-
-/**
- * The known plaintext value used as a "canary" to verify the master password upon unlocking.
- * This value is encrypted during vault initialization and stored. When unlocking, the derived key
- * must be able to decrypt the canary back to this original value.
- * @constant
- * @type {string}
- */
-const VAULT_CANARY_PLAINTEXT = 'devcore-vault-check';
-
-/**
- * Posts a message back to the main thread.
- * @template T
- * @param {SecurityCoreResponse<T>} message The message object to send.
- * @param {Transferable[]} [transfer] An optional array of transferable objects.
- * @example
- * postResponse({ command: 'INIT_VAULT_SUCCESS' });
- * postResponse({ command: 'ENCRYPT_SUCCESS', payload: encryptedData }, [encryptedData.ciphertext]);
- */
-function postResponse<T>(message: SecurityCoreResponse<T>, transfer?: Transferable[]): void {
-  if (transfer) {
-    self.postMessage(message, transfer);
-  } else {
-    self.postMessage(message);
-  }
+function generateSalt(): ArrayBuffer {
+  return self.crypto.getRandomValues(new Uint8Array(16)).buffer;
 }
 
 /**
- * Locks the vault by clearing the session key and the inactivity timer.
- * Notifies the main thread that the vault has been locked.
- * @returns {void}
- * @example
- * handleLockVault();
+ * Derives a cryptographic key from a password and salt using PBKDF2.
+ * @param {string} password The master password.
+ * @param {ArrayBuffer} salt The salt.
+ * @returns {Promise<CryptoKey>} The derived CryptoKey.
  */
-function handleLockVault(): void {
-  sessionKey = null;
-  if (inactivityTimer) {
-    clearTimeout(inactivityTimer);
-    inactivityTimer = null;
-  }
-  console.log('Security Core: Vault locked due to inactivity or explicit request.');
-  postResponse({ command: 'VAULT_LOCKED' });
+async function deriveKey(password: string, salt: ArrayBuffer): Promise<CryptoKey> {
+  const masterKey = await self.crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(password),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveKey']
+  );
+  return self.crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: salt,
+      iterations: PBKDF2_ITERATIONS,
+      hash: PBKDF2_HASH,
+    },
+    masterKey,
+    { name: AES_ALGORITHM, length: AES_KEY_LENGTH },
+    true,
+    ['encrypt', 'decrypt']
+  );
 }
 
 /**
- * Resets the inactivity timer. Any cryptographic operation will reset the timer.
- * If the timer expires, the vault will be locked automatically.
- * @returns {void}
- * @example
- * resetInactivityTimer();
+ * Encrypts a plaintext string using a given key.
+ * @param {string} plaintext The string to encrypt.
+ * @param {CryptoKey} key The key to use for encryption.
+ * @returns {Promise<Omit<EncryptedData, 'id'>>} The ciphertext and initialization vector (iv).
  */
-function resetInactivityTimer(): void {
-  if (inactivityTimer) {
-    clearTimeout(inactivityTimer);
-  }
-  inactivityTimer = self.setTimeout(handleLockVault, SESSION_TIMEOUT_MS);
+async function encrypt(plaintext: string, key: CryptoKey): Promise<Omit<EncryptedData, 'id'>> {
+  const iv = self.crypto.getRandomValues(new Uint8Array(AES_IV_LENGTH_BYTES));
+  const ciphertext = await self.crypto.subtle.encrypt(
+    { name: AES_ALGORITHM, iv },
+    key,
+    new TextEncoder().encode(plaintext)
+  );
+  return { ciphertext, iv };
 }
 
 /**
- * Handles incoming messages from the main thread and routes them to the appropriate function.
- * @param {MessageEvent<SecurityCoreRequest>} event The message event from the main thread.
- * @returns {Promise<void>}
- * @example
- * // This function is the event listener for the worker's 'message' event.
- * self.onmessage = handleMessage;
+ * Decrypts data using a given key.
+ * @param {ArrayBuffer} ciphertext The data to decrypt.
+ * @param {CryptoKey} key The key to use for decryption.
+ * @param {Uint8Array} iv The initialization vector.
+ * @returns {Promise<string>} The decrypted plaintext.
  */
-async function handleMessage(event: MessageEvent<SecurityCoreRequest>): Promise<void> {
-  const { command, payload } = event.data;
+async function decrypt(ciphertext: ArrayBuffer, key: CryptoKey, iv: Uint8Array): Promise<string> {
+  const decrypted = await self.crypto.subtle.decrypt(
+    { name: AES_ALGORITHM, iv },
+    key,
+    ciphertext
+  );
+  return new TextDecoder().decode(decrypted);
+}
+
+// --- WORKER MESSAGE HANDLING ---
+
+/**
+ * Represents a request from the main thread.
+ */
+interface WorkerRequest {
+  requestId: string;
+  command: string;
+  payload: any;
+}
+
+/**
+ * Handles incoming messages from the main thread, executes the requested command,
+ * and posts the result back.
+ * @param {MessageEvent<WorkerRequest>} event The message event.
+ */
+self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
+  const { requestId, command, payload } = event.data;
 
   try {
+    let result: any;
+    let transferList: Transferable[] = [];
+
     switch (command) {
-      case 'INIT_VAULT': {
-        const { masterPassword, salt } = payload;
-        sessionKey = await crypto.deriveKey(masterPassword, salt);
-        const canaryCipher = await crypto.encrypt(VAULT_CANARY_PLAINTEXT, sessionKey);
-        const canary: VaultCanary = { ciphertext: canaryCipher.ciphertext, iv: canaryCipher.iv };
-        resetInactivityTimer();
-        postResponse({ command: 'INIT_VAULT_SUCCESS', payload: { canary } }, [canary.ciphertext]);
+      case 'generate-salt':
+        result = generateSalt();
+        transferList.push(result);
         break;
-      }
 
-      case 'UNLOCK_VAULT': {
-        const { masterPassword, salt, canary } = payload;
-        const key = await crypto.deriveKey(masterPassword, salt);
-        const decryptedCanary = await crypto.decrypt(canary.ciphertext, key, canary.iv);
-        if (decryptedCanary !== VAULT_CANARY_PLAINTEXT) {
-          throw new Error('Invalid Master Password.');
-        }
-        sessionKey = key;
-        resetInactivityTimer();
-        postResponse({ command: 'UNLOCK_VAULT_SUCCESS' });
+      case 'derive-and-cache-key':
+        sessionKey = await deriveKey(payload.password, payload.salt);
+        result = true;
         break;
-      }
 
-      case 'LOCK_VAULT': {
-        handleLockVault();
-        break;
-      }
-
-      case 'ENCRYPT': {
+      case 'encrypt':
         if (!sessionKey) throw new Error('Vault is locked.');
-        const { id, plaintext } = payload;
-        const encryptedData = await crypto.encrypt(plaintext, sessionKey);
-        const responsePayload: EncryptedData = { id, ...encryptedData };
-        resetInactivityTimer();
-        postResponse({ command: 'ENCRYPT_SUCCESS', payload: responsePayload }, [responsePayload.ciphertext]);
+        result = await encrypt(payload.plaintext, sessionKey);
+        transferList.push(result.ciphertext);
         break;
-      }
 
-      case 'DECRYPT': {
+      case 'decrypt':
         if (!sessionKey) throw new Error('Vault is locked.');
-        const { id, ciphertext, iv } = payload as EncryptedData;
-        const plaintext = await crypto.decrypt(ciphertext, sessionKey, iv);
-        resetInactivityTimer();
-        postResponse({ command: 'DECRYPT_SUCCESS', payload: { id, plaintext } });
+        result = await decrypt(payload.ciphertext, sessionKey, payload.iv);
         break;
-      }
+
+      case 'lock':
+        sessionKey = null;
+        result = true;
+        break;
+
+      case 'is-unlocked':
+        result = !!sessionKey;
+        break;
 
       default:
         throw new Error(`Unknown command: ${command}`);
     }
-  } catch (error) {
-    console.error(`Security Core Error on command '${command}':`, error);
-    // On decryption failure, it's likely the key is wrong. Lock the vault.
-    if (command === 'DECRYPT' || command === 'UNLOCK_VAULT') {
-      handleLockVault();
-    }
-    postResponse({ command: `${command}_FAILURE`, error: (error as Error).message });
+
+    self.postMessage({ requestId, success: true, data: result }, transferList);
+  } catch (err) {
+    const error = err instanceof Error ? { name: err.name, message: err.message } : { name: 'UnknownError', message: 'An unknown error occurred in the worker.' };
+    self.postMessage({ requestId, success: false, error: error.message });
   }
-}
+};
 
-// Set the message handler for the worker.
-self.onmessage = handleMessage;
-
-console.log('Security Core Worker initialized.');
+console.log('Security Core Worker initialized and ready.');

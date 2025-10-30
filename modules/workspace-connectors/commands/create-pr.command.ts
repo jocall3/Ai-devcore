@@ -4,15 +4,23 @@
  * @license Apache-2.0
  */
 
-// @ts-ignore - InversifyJS is being introduced, so type errors are expected temporarily.
 import { inject, injectable } from 'inversify';
 import 'reflect-metadata';
 import type { Octokit } from 'octokit';
 
-// Assumed paths based on the new modular architecture
-import { ICommand } from '../../shared/interfaces/command.interface.ts';
-import { WorkspaceConnectorService } from '../services/workspace-connector.service.ts';
-import { WORKSPACE_CONNECTOR_TYPES } from '../constants/types.ts';
+// Corrected imports to resolve module not found errors.
+import { WorkspaceConnectorService } from '../workspace-connectors.service';
+import { SERVICE_IDENTIFIER } from '../../service.registry';
+
+/**
+ * @interface ICommand
+ * @description A generic command interface for actions that take a payload and return a result.
+ * @template TPayload - The type of the payload for the command.
+ * @template TResult - The expected return type of the command.
+ */
+interface ICommand<TPayload, TResult> {
+    execute(payload: TPayload): Promise<TResult>;
+}
 
 /**
  * @interface CreatePullRequestPayload
@@ -89,7 +97,7 @@ export type CreatePullRequestResult = {
  *
  * @example
  * // Assuming 'container' is an InversifyJS container
- * const createPrCommand = container.get<CreatePullRequestCommand>(WORKSPACE_COMMANDS.CreatePullRequest);
+ * const createPrCommand = container.get<CreatePullRequestCommand>(SERVICE_IDENTIFIER.CreatePullRequestCommand); // Assuming it's bound
  * try {
  *   const result = await createPrCommand.execute({
  *     owner: 'my-org',
@@ -120,7 +128,7 @@ export class CreatePullRequestCommand implements ICommand<CreatePullRequestPaylo
    * which provides access to authenticated clients for various services.
    */
   public constructor(
-    @inject(WORKSPACE_CONNECTOR_TYPES.WorkspaceConnectorService) workspaceConnectorService: WorkspaceConnectorService
+    @inject(SERVICE_IDENTIFIER.WorkspaceConnectorService) workspaceConnectorService: WorkspaceConnectorService
   ) {
     this.workspaceConnectorService = workspaceConnectorService;
   }

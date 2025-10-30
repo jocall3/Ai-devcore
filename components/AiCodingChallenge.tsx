@@ -1,11 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { generateCodingChallengeStream } from '../services/index.ts';
-import { useVaultModal } from '../contexts/VaultModalContext.tsx';
-import { useNotification } from '../contexts/NotificationContext.tsx';
-import { useGlobalState } from '../contexts/GlobalStateContext.tsx';
-import { BeakerIcon } from './icons.tsx';
-import { LoadingSpinner } from './shared/index.tsx';
-import { MarkdownRenderer } from './shared/index.tsx';
+import { generateCodingChallengeStream } from '../services/aiService';
+import { useVaultModal } from '../contexts/VaultModalContext';
+import { useNotification } from '../contexts/NotificationContext';
+import { useGlobalState } from '../contexts/GlobalStateContext';
+import { BeakerIcon } from './icons';
+import { LoadingSpinner, MarkdownRenderer } from './shared';
 
 /**
  * @component AiCodingChallenge
@@ -90,7 +89,7 @@ export const AiCodingChallenge: React.FC = () => {
         
         await withVault(async () => {
             try {
-                const stream = generateCodingChallengeStream(null);
+                const stream = generateCodingChallengeStream("Generate a unique coding challenge suitable for a software engineering interview. The challenge should include a clear problem description, one or two examples of input and expected output, and any relevant constraints. The difficulty should be intermediate. Format the entire response in Markdown.");
                 let fullResponse = '';
                 for await (const chunk of stream) {
                     fullResponse += chunk;

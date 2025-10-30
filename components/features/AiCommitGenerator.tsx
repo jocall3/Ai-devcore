@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { generateCommitMessageStream } from '../../services/index.ts';
+import { generateCommitMessageStream } from '../../services/aiService.ts';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';

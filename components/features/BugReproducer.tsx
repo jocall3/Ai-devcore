@@ -1,5 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { generateBugReproductionTestStream } from '../../services/aiService.ts';
+import { generateBugReproductionTestStream } from '../../services/index.ts';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { BugAntIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 
@@ -16,6 +19,11 @@ export const BugReproducer: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
     const handleGenerate = useCallback(async () => {
         if (!stackTrace.trim()) {
             setError('Please provide a stack trace.');
@@ -24,19 +32,38 @@ export const BugReproducer: React.FC = () => {
         setIsLoading(true);
         setError('');
         setGeneratedTest('');
-        try {
+
+        const executeGeneration = async () => {
             const stream = generateBugReproductionTestStream(stackTrace, context);
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;
                 setGeneratedTest(fullResponse);
             }
+        };
+
+        try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    throw new Error('Vault setup is required to use AI features.');
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    throw new Error('Vault must be unlocked to use AI features.');
+                }
+            }
+            await executeGeneration();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            setError(errorMessage);
+            addNotification(errorMessage, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [stackTrace, context]);
+    }, [stackTrace, context, vaultState, requestCreation, requestUnlock, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">

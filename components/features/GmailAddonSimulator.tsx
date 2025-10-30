@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { streamContent } from '../../services/aiService.ts';
+import { streamContent } from '../../services/index.ts';
 import { MailIcon, SparklesIcon, XMarkIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 
@@ -7,16 +7,7 @@ const mockEmail = {
     from: 'Alice <alice@example.com>',
     to: 'Me <me@example.com>',
     subject: 'Project Update & Question',
-    body: `Hey,
-
-Just wanted to give you a quick update. The new user authentication flow is complete and pushed to the staging server.
-
-I had a question about the next task regarding the database migration. The ticket says we need to migrate the 'users' table, but it's not clear on the required schema changes. Should I just add the new 'last_login' column or are there other modifications needed?
-
-Let me know when you have a chance.
-
-Thanks,
-Alice`
+    body: `Hey,\n\nJust wanted to give you a quick update. The new user authentication flow is complete and pushed to the staging server.\n\nI had a question about the next task regarding the database migration. The ticket says we need to migrate the 'users' table, but it's not clear on the required schema changes. Should I just add the new 'last_login' column or are there other modifications needed?\n\nLet me know when you have a chance.\n\nThanks,\nAlice`
 };
 
 export const GmailAddonSimulator: React.FC = () => {

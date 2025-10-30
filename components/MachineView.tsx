@@ -43,7 +43,7 @@ const DropZone: React.FC<{
         setIsOver(true);
     };
 
-    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    const handleDragLeave = (_e: React.DragEvent<HTMLDivElement>) => {
         setIsOver(false);
     };
 

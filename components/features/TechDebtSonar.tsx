@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { detectCodeSmells } from '../../services/aiService.ts';
+import { detectCodeSmells } from '../../services/index.ts';
 import type { CodeSmell } from '../../types.ts';
 import { MagnifyingGlassIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';

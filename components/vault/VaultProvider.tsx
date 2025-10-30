@@ -80,7 +80,8 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
          */
         const checkVaultStatus = async () => {
             const isInitialized = await vaultService.isVaultInitialized();
-            const isUnlocked = vaultService.isUnlocked();
+            // With the new worker-based security core, checking the lock status is an async operation.
+            const isUnlocked = await vaultService.isUnlocked();
             dispatch({ type: 'SET_VAULT_STATE', payload: { isInitialized, isUnlocked } });
             
             if (isInitialized && !isUnlocked) {

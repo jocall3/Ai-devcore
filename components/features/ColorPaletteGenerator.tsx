@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { HexColorPicker } from 'react-colorful';
-import { generateColorPalette, downloadFile } from '../../services/index.ts';
+import { generateColorPalette } from '../../services/aiService.ts';
+import { downloadFile } from '../../services/fileUtils.ts';
 import { SparklesIcon, ArrowDownTrayIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 
@@ -9,6 +10,7 @@ interface PreviewColors {
     pillBg: string;
     pillText: string;
     buttonBg: string;
+    buttonText: string;
 }
 
 const PreviewCard: React.FC<{ palette: string[], colors: PreviewColors, setColors: React.Dispatch<React.SetStateAction<PreviewColors>> }> = ({ palette, colors, setColors }) => {
@@ -38,7 +40,7 @@ const PreviewCard: React.FC<{ palette: string[], colors: PreviewColors, setColor
                     New Feature
                 </div>
                 <div className="mt-8 text-center">
-                     <button className="px-6 py-2 rounded-lg font-bold" style={{ backgroundColor: colors.buttonBg, color: colors.cardBg }}>
+                     <button className="px-6 py-2 rounded-lg font-bold" style={{ backgroundColor: colors.buttonBg, color: colors.buttonText }}>
                         Get Started
                     </button>
                 </div>
@@ -48,6 +50,7 @@ const PreviewCard: React.FC<{ palette: string[], colors: PreviewColors, setColor
                 <ColorSelector label="Pill Background" value={colors.pillBg} onChange={val => setColors(c => ({...c, pillBg: val}))} />
                 <ColorSelector label="Pill Text" value={colors.pillText} onChange={val => setColors(c => ({...c, pillText: val}))} />
                 <ColorSelector label="Button Background" value={colors.buttonBg} onChange={val => setColors(c => ({...c, buttonBg: val}))} />
+                <ColorSelector label="Button Text" value={colors.buttonText} onChange={val => setColors(c => ({...c, buttonText: val}))} />
             </div>
         </div>
     );
@@ -59,7 +62,7 @@ export const ColorPaletteGenerator: React.FC = () => {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
     const [previewColors, setPreviewColors] = useState<PreviewColors>({
-        cardBg: '#F0F2F5', pillBg: '#CCD3E8', pillText: '#0047AB', buttonBg: '#0047AB'
+        cardBg: '#F0F2F5', pillBg: '#CCD3E8', pillText: '#0047AB', buttonBg: '#0047AB', buttonText: '#FFFFFF'
     });
     
     const handleGenerate = useCallback(async () => {
@@ -67,13 +70,28 @@ export const ColorPaletteGenerator: React.FC = () => {
         setError('');
         try {
             const result = await generateColorPalette(baseColor);
-            setPalette(result.colors);
+            const newPalette = [
+                result.palette.primary.value,
+                result.palette.secondary.value,
+                result.palette.accent.value,
+                result.palette.neutral.value,
+                result.theme.background.value,
+                result.theme.surface.value,
+                result.theme.textPrimary.value,
+                result.theme.textSecondary.value,
+                result.theme.textOnPrimary.value,
+                result.theme.border.value,
+            ];
+            const uniquePalette = [...new Set(newPalette)];
+            setPalette(uniquePalette);
+
             setPreviewColors({
-                cardBg: result.colors[0],
-                pillBg: result.colors[2],
-                pillText: result.colors[5],
-                buttonBg: result.colors[5],
-            })
+                cardBg: result.theme.surface.value,
+                pillBg: result.palette.secondary.value,
+                pillText: result.theme.textPrimary.value,
+                buttonBg: result.palette.primary.value,
+                buttonText: result.theme.textOnPrimary.value,
+            });
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
             setError(`Failed to generate palette: ${errorMessage}`);
@@ -113,7 +131,7 @@ export const ColorPaletteGenerator: React.FC = () => {
 .button {
   margin-top: 2rem;
   background-color: ${previewColors.buttonBg};
-  color: ${previewColors.cardBg};
+  color: ${previewColors.buttonText};
   padding: 0.5rem 1.5rem;
   border-radius: 0.5rem;
   font-weight: bold;

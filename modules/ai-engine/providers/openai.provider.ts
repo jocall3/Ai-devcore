@@ -1,82 +1,93 @@
 /**
- * @file Implements the AI provider interface for OpenAI models.
+ * @file Implements the AI provider interface for OpenAI models, aligned with the new secure, modular architecture.
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { IAiProvider, AiProviderConfig, StreamContentRequest, GenerateJsonRequest } from '../types.ts';
-import { logError } from '../../services/telemetryService.ts';
+import { injectable, inject } from 'inversify';
+import 'reflect-metadata';
+
+// Corrected imports based on new architecture
+import { IAiProvider, Prompt, PromptPart, CommandResponse } from './iai-provider';
+import { ISecurityCore } from '../../security-core/i-security-core.service';
+import { SERVICE_IDENTIFIER } from '../../service.registry';
+import { logError } from '../../../services/telemetryService';
 
 /**
  * @class OpenAiProvider
  * @implements {IAiProvider}
- * @description An AI provider implementation for OpenAI's GPT models.
- * @example
- * ```typescript
- * const config = { apiKey: 'sk-...' };
- * const provider = new OpenAiProvider(config);
- * const stream = provider.streamContent({ prompt: 'Tell me a story.' });
- * for await (const chunk of stream) {
- *   console.log(chunk);
- * }
- * ```
+ * @description An AI provider for OpenAI's models, using the secure vault for API key management.
+ * @injectable
  */
+@injectable()
 export class OpenAiProvider implements IAiProvider {
-    /**
-     * @private
-     * @readonly
-     * @type {string}
-     * @description The base URL for the OpenAI API.
-     */
-    private readonly apiUrl = 'https://api.openai.com/v1/chat/completions';
-
-    /**
-     * @private
-     * @type {string}
-     * @description The API key for authenticating with the OpenAI API.
-     */
-    private apiKey: string;
+    private readonly chatApiUrl = 'https://api.openai.com/v1/chat/completions';
+    private readonly imageApiUrl = 'https://api.openai.com/v1/images/generations';
+    private apiKey: string | null = null;
+    private readonly securityCore: ISecurityCore;
 
     /**
      * @constructor
-     * @param {AiProviderConfig} config - The configuration for the provider, containing the API key.
-     * @throws {Error} If the API key is not provided in the configuration.
+     * @param {ISecurityCore} securityCore - Injected Security Core service for secure credential access.
      */
-    constructor(config: AiProviderConfig) {
-        if (!config.apiKey) {
-            throw new Error('OpenAI API key is required for OpenAiProvider.');
-        }
-        this.apiKey = config.apiKey;
+    public constructor(
+        @inject(SERVICE_IDENTIFIER.SecurityCore) securityCore: ISecurityCore
+    ) {
+        this.securityCore = securityCore;
     }
 
     /**
-     * @method streamContent
-     * @description Generates content as a stream from the OpenAI API.
-     * @param {StreamContentRequest} request - The request object containing the prompt and other parameters.
-     * @returns {AsyncGenerator<string, void, unknown>} An async generator that yields text chunks.
-     * @example
-     * ```typescript
-     * const request = { prompt: 'Explain quantum computing simply.' };
-     * const stream = openaiProvider.streamContent(request);
-     * for await (const chunk of stream) {
-     *   process.stdout.write(chunk);
-     * }
-     * ```
+     * Retrieves the OpenAI API key securely from the vault just-in-time.
+     * @private
+     * @returns {Promise<string>} The OpenAI API key.
+     * @throws {Error} If the API key is not found or the vault is locked.
      */
-    async *streamContent(request: StreamContentRequest): AsyncGenerator<string, void, unknown> {
-        const { prompt, systemInstruction, temperature = 0.7 } = request;
+    private async getApiKey(): Promise<string> {
+        // Use a cached key for the session if available
+        if (this.apiKey) {
+            return this.apiKey;
+        }
+        
+        // This call will throw an error if the vault is locked, which is the desired behavior.
+        const key = await this.securityCore.getDecryptedCredential('openai_api_key');
+        if (!key) {
+            throw new Error('OpenAI API key not found. Please add it in the Workspace Connector Hub.');
+        }
+        this.apiKey = key;
+        return this.apiKey;
+    }
 
-        const messages: { role: 'system' | 'user'; content: string }[] = [];
+    /**
+     * Converts a generic Prompt type into the format expected by the OpenAI API.
+     * @private
+     * @param {Prompt} prompt - The prompt to convert.
+     * @returns {string | Array<object>} The OpenAI-compatible content payload.
+     */
+    private formatPrompt(prompt: Prompt): string | Array<object> {
+        if (typeof prompt === 'string') {
+            return prompt;
+        }
+
+        // Handle multimodal prompts
+        return prompt.map((p: PromptPart) => {
+            if (typeof p === 'string') {
+                return { type: 'text', text: p };
+            }
+            return {
+                type: 'image_url',
+                image_url: { url: `data:${p.inlineData.mimeType};base64,${p.inlineData.data}` }
+            };
+        });
+    }
+
+    /** @inheritdoc */
+    async *streamContent(prompt: Prompt, systemInstruction?: string, temperature: number = 0.7): AsyncGenerator<string, void, unknown> {
+        const apiKey = await this.getApiKey();
+        const messages: { role: 'system' | 'user'; content: any }[] = [];
         if (systemInstruction) {
             messages.push({ role: 'system', content: systemInstruction });
         }
-        
-        if (typeof prompt === 'string') {
-            messages.push({ role: 'user', content: prompt });
-        } else {
-            const content = prompt.parts.map(p => p.text || '').join('\n');
-            messages.push({ role: 'user', content });
-        }
+        messages.push({ role: 'user', content: this.formatPrompt(prompt) });
 
         const body = {
             model: 'gpt-4o',
@@ -85,11 +96,11 @@ export class OpenAiProvider implements IAiProvider {
             stream: true,
         };
 
-        const response = await fetch(this.apiUrl, {
+        const response = await fetch(this.chatApiUrl, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey}`,
+                'Authorization': `Bearer ${apiKey}`,
             },
             body: JSON.stringify(body),
         });
@@ -115,15 +126,11 @@ export class OpenAiProvider implements IAiProvider {
             for (const line of lines) {
                 if (line.startsWith('data: ')) {
                     const data = line.substring(6);
-                    if (data.trim() === '[DONE]') {
-                        return;
-                    }
+                    if (data.trim() === '[DONE]') return;
                     try {
                         const parsed = JSON.parse(data);
                         const chunk = parsed.choices[0]?.delta?.content;
-                        if (chunk) {
-                            yield chunk;
-                        }
+                        if (chunk) yield chunk;
                     } catch (e) {
                         console.error('Error parsing OpenAI stream chunk:', data, e);
                     }
@@ -132,46 +139,24 @@ export class OpenAiProvider implements IAiProvider {
         }
     }
 
-    /**
-     * @method generateJson
-     * @description Generates a structured JSON response from the OpenAI API.
-     * @template T - The expected type of the JSON object.
-     * @param {GenerateJsonRequest} request - The request object containing the prompt and system instruction.
-     * @returns {Promise<T>} A promise that resolves to the parsed JSON object.
-     * @example
-     * ```typescript
-     * const request = {
-     *   prompt: 'Generate a user profile for John Doe.',
-     *   systemInstruction: 'You must respond with a JSON object with `name` and `email` fields.'
-     * };
-     * const userProfile = await openaiProvider.generateJson<{ name: string; email: string; }>(request);
-     * console.log(userProfile.email);
-     * ```
-     */
-    async generateJson<T>(request: GenerateJsonRequest): Promise<T> {
-        const { prompt, systemInstruction, temperature = 0.2 } = request;
+    /** @inheritdoc */
+    async generateJson<T>(prompt: Prompt, schema: object, systemInstruction?: string, temperature: number = 0.2): Promise<T> {
+        const apiKey = await this.getApiKey();
+        const finalSystemInstruction = `${systemInstruction || 'You are a helpful assistant.'} You MUST respond in a valid JSON object. Do not include any text outside of the JSON object. Do not wrap the JSON in markdown backticks.`;
 
-        let finalSystemInstruction = systemInstruction || 'You are a helpful assistant that only responds with JSON.';
-        finalSystemInstruction += '\n\nYou MUST respond with a valid JSON object. Do not include any text outside of the JSON object. Do not wrap the JSON in markdown backticks.';
-
-        const messages = [
-            { role: 'system', content: finalSystemInstruction },
-            { role: 'user', content: prompt }
-        ];
-        
         const body = {
             model: 'gpt-4o',
-            messages,
+            messages: [
+                { role: 'system', content: finalSystemInstruction },
+                { role: 'user', content: this.formatPrompt(prompt) }
+            ],
             temperature,
             response_format: { type: 'json_object' },
         };
 
-        const response = await fetch(this.apiUrl, {
+        const response = await fetch(this.chatApiUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey}`,
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
             body: JSON.stringify(body),
         });
 
@@ -183,17 +168,56 @@ export class OpenAiProvider implements IAiProvider {
 
         const jsonResponse = await response.json();
         const content = jsonResponse.choices[0]?.message?.content;
-
-        if (!content) {
-            throw new Error('OpenAI API returned an empty response content.');
-        }
+        if (!content) throw new Error('OpenAI API returned an empty response content.');
 
         try {
             return JSON.parse(content) as T;
         } catch (e) {
-            console.error('Failed to parse JSON response from OpenAI:', content);
             logError(e as Error, { context: 'OpenAI JSON parsing', response: content });
             throw new Error('OpenAI API did not return a valid JSON object.');
         }
+    }
+
+    // The following methods are placeholders to satisfy the IAiProvider interface.
+    // A full implementation would be required for these features.
+
+    /** @inheritdoc */
+    async generateContent(prompt: Prompt, systemInstruction?: string, temperature?: number): Promise<string> {
+        let streamedContent = '';
+        for await (const chunk of this.streamContent(prompt, systemInstruction, temperature)) {
+            streamedContent += chunk;
+        }
+        return streamedContent;
+    }
+
+    /** @inheritdoc */
+    async getInferenceFunction(prompt: string, functionDeclarations: object[], knowledgeBase?: string): Promise<CommandResponse> {
+        logError(new Error("OpenAiProvider.getInferenceFunction is not implemented."));
+        return { text: "Function calling is not implemented for this provider yet." };
+    }
+
+    /** @inheritdoc */
+    async generateImage(prompt: string): Promise<string> {
+        const apiKey = await this.getApiKey();
+        const response = await fetch(this.imageApiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({ model: 'dall-e-3', prompt, n: 1, size: '1024x1024', response_format: 'b64_json' })
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`OpenAI Image API error: ${errorText}`);
+        }
+        const data = await response.json();
+        return `data:image/png;base64,${data.data[0].b64_json}`;
+    }
+
+    /** @inheritdoc */
+    async generateImageFromImageAndText(prompt: string, base64Image: string, mimeType: string): Promise<string> {
+        console.warn("OpenAiProvider.generateImageFromImageAndText is not fully implemented and falls back to text-to-image.");
+        return this.generateImage(prompt);
     }
 }

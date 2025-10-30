@@ -1,7 +1,19 @@
 import React, { useState } from 'react';
-import { generateCiCdConfig } from '../../services/index.ts';
+import { aiService, ICommand, IAiProvider } from '../../services/index.ts';
 import { PaperAirplaneIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+
+// Command to generate CI/CD config, aligned with the new AI service architecture.
+class GenerateCiCdConfigCommand implements ICommand<string> {
+    constructor(private platform: string, private description: string) {}
+
+    async execute(provider: IAiProvider): Promise<string> {
+        const systemInstruction = `You are a CI/CD expert. Generate a complete and valid configuration file for the specified platform based on the user's description. The output should be a single code block in the appropriate format (e.g., YAML for GitHub Actions). Do not include any explanatory text outside of the code block.`;
+        const prompt = `Platform: ${this.platform}\n\nDescription of stages:\n${this.description}`;
+        // Using a lower temperature for more deterministic code generation.
+        return provider.generateContent(prompt, systemInstruction, 0.3);
+    }
+}
 
 const platforms = ['GitHub Actions', 'GitLab CI', 'CircleCI', 'Jenkins'];
 const exampleDescription = "Install Node.js dependencies, run linting and tests, build the production app, and then deploy to Vercel.";
@@ -21,10 +33,13 @@ export const CiCdPipelineGenerator: React.FC = () => {
         setIsLoading(true);
         setError('');
         try {
-            const result = await generateCiCdConfig(platform, description);
+            const command = new GenerateCiCdConfigCommand(platform, description);
+            const result = await aiService.execute(command) as string;
             setConfig(result);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to generate config.');
+            const errorMessage = err instanceof Error ? err.message : 'Failed to generate config.';
+            // This now includes vault-related errors like 'Vault is locked.'
+            setError(errorMessage);
         } finally {
             setIsLoading(false);
         }
@@ -39,8 +54,13 @@ export const CiCdPipelineGenerator: React.FC = () => {
             <div className="flex-grow flex flex-col gap-4 min-h-0">
                  <div className="flex flex-col flex-1 min-h-0">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                        <div><label className="block text-sm">Platform</label><select value={platform} onChange={e => setPlatform(e.target.value)} className="w-full mt-1 p-2 bg-surface border rounded"><option>GitHub Actions</option><option>GitLab CI</option><option>CircleCI</option></select></div>
-                        <div className="md:col-span-2"><label className="block text-sm">Describe Stages</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} className="w-full mt-1 p-2 bg-surface border rounded"/></div>
+                        <div>
+                            <label className="block text-sm">Platform</label>
+                            <select value={platform} onChange={e => setPlatform(e.target.value)} className="w-full mt-1 p-2 bg-surface border border-border rounded">
+                                {platforms.map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                        </div>
+                        <div className="md:col-span-2"><label className="block text-sm">Describe Stages</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} className="w-full mt-1 p-2 bg-surface border border-border rounded"/></div>
                     </div>
                      <button onClick={handleGenerate} disabled={isLoading} className="btn-primary w-full max-w-xs mx-auto flex items-center justify-center py-2"><SparklesIcon /> {isLoading ? 'Generating...' : 'Generate Configuration'}</button>
                 </div>

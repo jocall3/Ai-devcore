@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import JSZip from 'jszip';
 import type { GeneratedFile } from '../../types.ts';
-import { generateFullStackFeature } from '../../services/aiService.ts';
+import { generateFullStackFeature } from '../../services/index.ts';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { ServerStackIcon, SparklesIcon, DocumentTextIcon, ArrowDownTrayIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
@@ -27,7 +27,7 @@ export const AiFullStackFeatureBuilder: React.FC = () => {
             setGeneratedFiles(resultFiles);
             if (resultFiles.length > 0) {
                 // Find the main component file to show first
-                const componentFile = resultFiles.find(f => f.filePath.endsWith('Component.tsx'));
+                const componentFile = resultFiles.find((f: GeneratedFile) => f.filePath.endsWith('Component.tsx'));
                 setActiveTab(componentFile || resultFiles[0]);
             }
             addNotification('Full-stack feature generated!', 'success');

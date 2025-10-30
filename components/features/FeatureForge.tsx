@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { generateAppFeatureComponent } from '../../services/aiService.ts';
 import { getAllCustomFeatures, saveCustomFeature, deleteCustomFeature } from '../../services/dbService.ts';
 import type { CustomFeature } from '../../types.ts';
-import { CpuChipIcon, PlusIcon, TrashIcon } from '../icons.tsx';
+import { CpuChipIcon, TrashIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { ALL_FEATURES } from './index.ts';

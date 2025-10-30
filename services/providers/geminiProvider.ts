@@ -7,7 +7,9 @@ import {
   GoogleGenerativeAI,
   FunctionDeclaration,
   Part,
-} from "@google/generative-ai";
+  FunctionCall,
+  GenerateContentStreamResult
+} from "@google/genai";
 import { logError } from "../telemetryService";
 
 // Note: In a full modular refactor, the interfaces below would be moved
@@ -30,7 +32,7 @@ export interface GenerateContentArgs extends StreamContentArgs {}
 /**
  * Represents the arguments for a JSON generation request.
  */
-export interface GenerateJsonArgs<T> extends GenerateContentArgs {
+export interface GenerateJsonArgs extends GenerateContentArgs {
   schema: object; // The JSON schema for the response.
 }
 
@@ -81,10 +83,10 @@ export interface IAiProvider {
   /**
    * Generates a JSON object from the AI model based on a schema.
    * @template T The expected type of the parsed JSON object.
-   * @param {GenerateJsonArgs<T>} args - The arguments for the request, including the schema.
+   * @param {GenerateJsonArgs} args - The arguments for the request, including the schema.
    * @returns {Promise<T>} A promise that resolves to the parsed JSON object.
    */
-  generateJson<T>(args: GenerateJsonArgs<T>): Promise<T>;
+  generateJson<T>(args: GenerateJsonArgs): Promise<T>;
 
   /**
    * Performs function calling based on a prompt and available tools.
@@ -149,7 +151,7 @@ export class GeminiProvider implements IAiProvider {
         generationConfig: { temperature: args.temperature ?? 0.5 }
       });
 
-      const result = await model.generateContentStream(args.prompt);
+      const result: GenerateContentStreamResult = await model.generateContentStream(args.prompt);
 
       for await (const chunk of result.stream) {
         yield chunk.text();
@@ -187,13 +189,13 @@ export class GeminiProvider implements IAiProvider {
    * @example
    * const schema = { type: "object", properties: { city: { type: "string" } }, required: ["city"] };
    * const provider = new GeminiProvider(client);
-   * const response = await provider.generateJson<{ city: string }>({
+   * const response = await provider.generateJson<{ city: string }>({ 
    *   prompt: "What city is the Eiffel Tower in?",
    *   schema
    * });
    * console.log(response.city); // "Paris"
    */
-  async generateJson<T>(args: GenerateJsonArgs<T>): Promise<T> {
+  async generateJson<T>(args: GenerateJsonArgs): Promise<T> {
     try {
       const model = this.client.getGenerativeModel({
         model: this.textModelName,
@@ -252,7 +254,7 @@ export class GeminiProvider implements IAiProvider {
 
       const result = await model.generateContent(args.prompt);
       const response = result.response;
-      const functionCalls = response.functionCalls()?.map(call => ({
+      const functionCalls = response.functionCalls()?.map((call: FunctionCall) => ({
         name: call.name,
         args: call.args,
       }));
@@ -274,7 +276,7 @@ export class GeminiProvider implements IAiProvider {
    * const imageUrls = await provider.generateImages({ prompt: "A photo of an astronaut riding a horse" });
    * console.log(imageUrls[0]); // "data:image/png;base64,..."
    */
-  async generateImages(args: GenerateImageArgs): Promise<string[]> {
+  async generateImages(_args: GenerateImageArgs): Promise<string[]> {
     logError(new Error("GeminiProvider.generateImages is not implemented. The underlying public SDK does not support this model."));
     console.warn("GeminiProvider.generateImages is not implemented.");
     // This is a placeholder. The current public @google/generative-ai SDK does not

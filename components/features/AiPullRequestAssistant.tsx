@@ -1,7 +1,7 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { generatePrSummaryStructured, generateTechnicalSpecFromDiff } from '../../services/index.ts';
-import { createDocument, insertText } from '../../services/workspaceService.ts';
-import type { StructuredPrSummary } from '../../types.ts';
+import React, { useState, useCallback } from 'react';
+import { generatePrSummaryStructured, generateTechnicalSpecFromDiff } from '../../services/aiService';
+import { createDocument, insertText } from '../../services/workspaceService';
+import type { StructuredPrSummary } from '../../types';
 import { AiPullRequestAssistantIcon, DocumentIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';

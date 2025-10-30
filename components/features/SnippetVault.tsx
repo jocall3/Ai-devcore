@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { LockClosedIcon, SparklesIcon, TrashIcon, ClipboardDocumentIcon, ArrowDownTrayIcon } from '../icons.tsx';
 import { useLocalStorage } from '../../hooks/useLocalStorage.ts';
-import { enhanceSnippetStream, generateTagsForCode } from '../../services/aiService.ts';
+import { streamContent, generateJson } from '../../services/index.ts';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { downloadFile } from '../../services/fileUtils.ts';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 
 interface Snippet {
     id: number; name: string; code: string; language: string; tags: string[];
@@ -25,9 +27,14 @@ export const SnippetVault: React.FC = () => {
     const [snippets, setSnippets] = useLocalStorage<Snippet[]>('devcore_snippets', [{ id: 1, name: 'React Hook Boilerplate', language: 'javascript', code: `import { useState } from 'react';\n\nconst useCustomHook = () => {\n  const [value, setValue] = useState(null);\n  return { value, setValue };\n};`, tags: ['react', 'hook'] }]);
     const [activeSnippet, setActiveSnippet] = useState<Snippet | null>(null);
     const [isEnhancing, setIsEnhancing] = useState(false);
+    const [isTagging, setIsTagging] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [isEditingName, setIsEditingName] = useState(false);
+    
     const { addNotification } = useNotification();
+    const { state: globalState } = useGlobalState();
+    const { vaultState } = globalState;
+    const { requestUnlock, requestCreation } = useVaultModal();
 
     const filteredSnippets = useMemo(() => {
         if (!searchTerm) return snippets;
@@ -40,40 +47,81 @@ export const SnippetVault: React.FC = () => {
     }, [snippets, searchTerm]);
 
     useEffect(() => {
-        if (!activeSnippet && filteredSnippets.length > 0) setActiveSnippet(filteredSnippets[0]);
-        if (activeSnippet) setActiveSnippet(snippets.find((s: Snippet) => s.id === activeSnippet.id) || null);
+        if (!activeSnippet && filteredSnippets.length > 0) {
+            setActiveSnippet(filteredSnippets[0]);
+        } else if (activeSnippet) {
+            const currentInList = snippets.find((s: Snippet) => s.id === activeSnippet.id);
+            setActiveSnippet(currentInList || (filteredSnippets.length > 0 ? filteredSnippets[0] : null));
+        }
     }, [snippets, activeSnippet, filteredSnippets]);
 
     const updateSnippet = (snippet: Snippet) => {
         setSnippets(snippets.map((s: Snippet) => s.id === snippet.id ? snippet : s));
-        setActiveSnippet(snippet);
     };
 
-    const handleEnhance = async () => {
+    const withVault = useCallback(async (callback: () => Promise<void>) => {
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (!created) {
+                addNotification('Vault setup is required to use AI features.', 'error');
+                throw new Error('Vault setup cancelled.');
+            }
+        }
+        if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (!unlocked) {
+                addNotification('Vault must be unlocked to use AI features.', 'info');
+                throw new Error('Vault unlock cancelled.');
+            }
+        }
+        await callback();
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
+
+    const handleEnhance = useCallback(async () => {
         if (!activeSnippet) return;
         setIsEnhancing(true);
         try {
-            const stream = enhanceSnippetStream(activeSnippet.code);
-            let fullResponse = '';
-            for await (const chunk of stream) {
-                fullResponse += chunk;
-                updateSnippet({ ...activeSnippet, code: fullResponse.replace(/^```(?:\w+\n)?/, '').replace(/```$/, '') });
-            }
-        } finally { setIsEnhancing(false); }
-    };
-    
-    const handleAiTagging = async (snippet: Snippet) => {
-        if (!snippet.code.trim()) return;
-        try {
-            const suggestedTags = await generateTagsForCode(snippet.code);
-            const newTags = [...new Set([...(snippet.tags || []), ...suggestedTags])];
-            updateSnippet({...snippet, tags: newTags});
-            addNotification('AI tags added!', 'success');
-        } catch(e) {
-            console.error("AI tagging failed:", e);
-            addNotification('AI tagging failed.', 'error');
+            await withVault(async () => {
+                const prompt = `Enhance the following code snippet. Improve its readability, performance, and adherence to best practices. Respond ONLY with the raw, updated code, without any markdown formatting, explanations, or code fences.
+
+Code:
+---
+${activeSnippet.code}
+---`;
+                const stream = streamContent(prompt, "You are an expert software engineer performing a code refactoring task.");
+                let fullResponse = '';
+                for await (const chunk of stream) {
+                    fullResponse += chunk;
+                    updateSnippet({ ...activeSnippet, code: fullResponse });
+                }
+            });
+        } catch (e) {
+            if (e instanceof Error && e.message.includes('cancelled')) return; // Silently fail on user cancellation
+            addNotification(`Enhancement failed: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+        } finally {
+            setIsEnhancing(false);
         }
-    };
+    }, [activeSnippet, withVault, updateSnippet, addNotification]);
+    
+    const handleAiTagging = useCallback(async (snippet: Snippet) => {
+        if (!snippet.code.trim()) return;
+        setIsTagging(true);
+        try {
+            await withVault(async () => {
+                const prompt = `Generate a list of 3-5 relevant, one-word, lowercase tags for the following code snippet. Return a JSON array of strings. Examples: ["react", "typescript", "state-management"].\n\nCode:\n---\n${snippet.code}\n---`;
+                const schema = { type: 'array', items: { type: 'string' } };
+                const suggestedTags = await generateJson<string[]>(prompt, "You are a code analysis tool that generates tags.", schema);
+                const newTags = [...new Set([...(snippet.tags || []), ...suggestedTags])];
+                updateSnippet({...snippet, tags: newTags});
+                addNotification('AI tags added!', 'success');
+            });
+        } catch(e) {
+            if (e instanceof Error && e.message.includes('cancelled')) return;
+            addNotification(`AI tagging failed: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+        } finally {
+            setIsTagging(false);
+        }
+    }, [withVault, updateSnippet, addNotification]);
 
     const handleAddNew = () => {
         const newSnippet: Snippet = { id: Date.now(), name: 'New Snippet', language: 'plaintext', code: '', tags: [] };
@@ -83,7 +131,6 @@ export const SnippetVault: React.FC = () => {
     
     const handleDelete = (id: number) => {
         setSnippets(snippets.filter((s: Snippet) => s.id !== id));
-        if(activeSnippet?.id === id) setActiveSnippet(filteredSnippets.length > 1 ? filteredSnippets[0] : null);
     };
     
     const handleDownload = () => {
@@ -99,7 +146,7 @@ export const SnippetVault: React.FC = () => {
     
     const handleTagsChange = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter' && activeSnippet) {
-            const newTag = e.currentTarget.value.trim();
+            const newTag = e.currentTarget.value.trim().toLowerCase();
             if (newTag && !activeSnippet.tags.includes(newTag)) {
                 updateSnippet({...activeSnippet, tags: [...(activeSnippet.tags ?? []), newTag]});
             }
@@ -121,8 +168,12 @@ export const SnippetVault: React.FC = () => {
                         <div className="flex justify-between items-center mb-2">
                             {isEditingName ? <input type="text" value={activeSnippet.name} onChange={handleNameChange} onBlur={() => setIsEditingName(false)} autoFocus className="text-lg font-bold bg-gray-100 dark:bg-slate-700 rounded px-2"/> : <h3 onDoubleClick={() => setIsEditingName(true)} className="text-lg font-bold cursor-pointer">{activeSnippet.name}</h3>}
                             <div className="flex gap-2">
-                                <button onClick={() => handleAiTagging(activeSnippet)} className="flex items-center gap-2 px-3 py-1 bg-teal-500/80 text-white font-bold text-xs rounded-md"><SparklesIcon /> AI Tag</button>
-                                <button onClick={handleEnhance} disabled={isEnhancing} className="flex items-center gap-2 px-3 py-1 bg-purple-500/80 text-white font-bold text-xs rounded-md disabled:bg-gray-400"><SparklesIcon /> AI Enhance</button>
+                                <button onClick={() => handleAiTagging(activeSnippet)} disabled={isTagging || isEnhancing} className="flex items-center gap-2 px-3 py-1 bg-teal-500/80 text-white font-bold text-xs rounded-md disabled:bg-gray-400 min-w-[80px] justify-center">
+                                    {isTagging ? <LoadingSpinner /> : <><SparklesIcon /> AI Tag</>}
+                                </button>
+                                <button onClick={handleEnhance} disabled={isEnhancing || isTagging} className="flex items-center gap-2 px-3 py-1 bg-purple-500/80 text-white font-bold text-xs rounded-md disabled:bg-gray-400 min-w-[100px] justify-center">
+                                    {isEnhancing ? <LoadingSpinner /> : <><SparklesIcon /> AI Enhance</>}
+                                </button>
                                 <button onClick={handleDownload} className="flex items-center gap-1 px-3 py-1 bg-gray-100 dark:bg-slate-700 text-xs rounded-md"><ArrowDownTrayIcon className="w-4 h-4"/> Download</button>
                             </div>
                         </div>

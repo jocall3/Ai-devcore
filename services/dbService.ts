@@ -50,7 +50,7 @@ const getDb = (): Promise<IDBPDatabase<DevCoreDB>> => {
     }
 
     dbPromise = openDB<DevCoreDB>(DB_NAME, DB_VERSION, {
-        upgrade(db, oldVersion, newVersion, transaction) {
+        upgrade(db, oldVersion, newVersion, _transaction) {
             console.log(`Upgrading database from version ${oldVersion} to ${newVersion}`);
             // The fall-through switch is an intentional and correct pattern for IndexedDB upgrades.
             switch (oldVersion) {
@@ -59,7 +59,7 @@ const getDb = (): Promise<IDBPDatabase<DevCoreDB>> => {
                         const filesStore = db.createObjectStore(FILES_STORE_NAME, { keyPath: 'filePath' });
                         filesStore.createIndex('by-filePath', 'filePath');
                     }
-                // falls through
+                    /* falls through */
                 case 1:
                     if (!db.objectStoreNames.contains(VAULT_STORE_NAME)) {
                         db.createObjectStore(VAULT_STORE_NAME);
@@ -67,11 +67,12 @@ const getDb = (): Promise<IDBPDatabase<DevCoreDB>> => {
                     if (!db.objectStoreNames.contains(ENCRYPTED_TOKENS_STORE_NAME)) {
                         db.createObjectStore(ENCRYPTED_TOKENS_STORE_NAME, { keyPath: 'id' });
                     }
-                // falls through
+                    /* falls through */
                 case 2:
                     if (!db.objectStoreNames.contains(CUSTOM_FEATURES_STORE_NAME)) {
                         db.createObjectStore(CUSTOM_FEATURES_STORE_NAME, { keyPath: 'id' });
                     }
+                    break;
             }
         },
         blocked() {

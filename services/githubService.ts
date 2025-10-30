@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-import type { Octokit } from 'octokit';
+import type { Octokit } from '@octokit/rest';
 import type { Repo, FileNode } from '../types.ts';
 import { logEvent, logError, measurePerformance } from './telemetryService.ts';
 
@@ -71,13 +71,19 @@ export const getRepoTree = async (octokit: Octokit, owner: string, repo: string)
             const { data: treeData } = await octokit.request('GET /repos/{owner}/{repo}/git/trees/{tree_sha}', { owner, repo, tree_sha: treeSha, recursive: 'true' });
             
             const root: FileNode = { name: repo, type: 'folder', path: '', children: [] };
-            treeData.tree.forEach((item: any) => {
+            
+            interface TreeItem {
+                path?: string;
+                type?: 'blob' | 'tree' | 'commit';
+            }
+
+            (treeData.tree as TreeItem[]).forEach((item) => {
                 if (!item.path) return;
                 const pathParts = item.path.split('/');
                 let currentNode = root;
-                pathParts.forEach((part, index) => {
+                pathParts.forEach((part: string, index: number) => {
                     if (!currentNode.children) { currentNode.children = []; }
-                    let childNode = currentNode.children.find(child => child.name === part);
+                    let childNode = currentNode.children.find((child: FileNode) => child.name === part);
                     if (!childNode) {
                         const isLastPart = index === pathParts.length - 1;
                         const type = isLastPart ? (item.type === 'tree' ? 'folder' : 'file') : 'folder';
@@ -121,7 +127,7 @@ export const getFileContent = async (octokit: Octokit, owner: string, repo: stri
             return content;
         } catch (error) {
              logError(error as Error, { context: 'getFileContent', owner, repo, path });
-             throw new Error(`Failed to fetch file content for "${path}": ${(error as Error).message}`);
+             throw new Error(`Failed to fetch file content for \"${path}\": ${(error as Error).message}`);
         }
     });
 };
@@ -174,7 +180,7 @@ export const commitFiles = async (
             );
             const blobs = await Promise.all(blobPromises);
             
-            const tree = blobs.map((blob, index) => ({
+            const tree = blobs.map((blob: any, index: number) => ({
                 path: files[index].path,
                 mode: '100644' as const,
                 type: 'blob' as const,

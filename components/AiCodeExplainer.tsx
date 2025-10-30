@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import mermaid from 'mermaid';
-import { explainCodeStructured, generateMermaidJs } from '../services/index.ts';
+import { aiService } from '../services/index.ts';
 import type { StructuredExplanation } from '../types.ts';
 import { CpuChipIcon } from './icons.tsx';
 import { MarkdownRenderer, LoadingSpinner } from './shared/index.tsx';
@@ -60,8 +60,8 @@ export const AiCodeExplainer: React.FC<{ initialCode?: string }> = ({ initialCod
         
         const performExplain = async () => {
              const [explanationResult, mermaidResult] = await Promise.all([
-                explainCodeStructured(codeToExplain),
-                generateMermaidJs(codeToExplain)
+                aiService.explainCodeStructured(codeToExplain),
+                aiService.generateMermaidJs(codeToExplain)
             ]);
             setExplanation(explanationResult);
             setMermaidCode(mermaidResult.replace(/```mermaid\n|```/g, ''));

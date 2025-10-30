@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { SparklesIcon, PlusIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpOnSquareIcon } from '../icons.tsx';
+import { PlusIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpOnSquareIcon } from '../icons.tsx';
 import { useAiPersonalities } from '../../hooks/useAiPersonalities.ts';
 import { formatSystemPromptToString } from '../../utils/promptUtils.ts';
-import { streamContent } from '../../services/index.ts';
+import { aiService } from '../../services/aiService.ts';
 import { downloadJson } from '../../services/fileUtils.ts';
 import type { SystemPrompt } from '../../types.ts';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
@@ -66,7 +66,10 @@ export const AiPersonalityForge: React.FC = () => {
         setIsStreaming(true);
 
         try {
-            const stream = streamContent(testbedInput, systemInstruction, 0.7);
+            const stream = aiService.execute<AsyncGenerator<string, void, unknown>>({
+                execute: (provider) => provider.streamContent(testbedInput, systemInstruction, 0.7)
+            });
+
             let fullResponse = '';
             setChatHistory(prev => [...prev, { role: 'model', content: '' }]);
             for await (const chunk of stream) {
