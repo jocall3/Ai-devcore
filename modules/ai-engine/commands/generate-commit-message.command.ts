@@ -1,33 +1,10 @@
+```typescript
 /**
  * @file Implements the command for generating a commit message.
  * @license Apache-2.0
  */
 
-/**
- * Represents a command that can be executed.
- * @template T - The expected return type of the execute method.
- */
-export interface ICommand<T> {
-  /**
-   * Executes the command logic.
-   * @param context - The context containing necessary services and data for execution.
-   * @returns The result of the command execution.
-   */
-  execute(context: { [key: string]: any }): T;
-}
-
-/**
- * @interface IAiProvider
- * @description Defines the contract for an AI provider, abstracting the specific implementation (e.g., Gemini, OpenAI).
- */
-export interface IAiProvider {
-  /**
-   * Generates a commit message based on a provided git diff.
-   * @param diff - The git diff string.
-   * @returns A promise that resolves to the generated commit message string.
-   */
-  generateCommitMessage(diff: string): Promise<string>;
-}
+import { ICommand, IAiProvider } from '../ai-engine.service';
 
 /**
  * @class GenerateCommitMessageCommand
@@ -88,3 +65,4 @@ export class GenerateCommitMessageCommand implements ICommand<Promise<string>> {
     return aiProvider.generateCommitMessage(this.diff);
   }
 }
+```
