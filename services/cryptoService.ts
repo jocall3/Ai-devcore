@@ -98,6 +98,7 @@ function postCommandToWorker<T>(command: string, payload: any = {}): Promise<T> 
     return Promise.reject(new Error('Security Core Worker is not initialized. Please call initSecurityCore() first.'));
   }
 
+  // crypto.randomUUID() refers to the global Web Crypto API (window.crypto.randomUUID())
   const requestId = crypto.randomUUID();
   const request: WorkerRequest = { command, payload, requestId };
 
