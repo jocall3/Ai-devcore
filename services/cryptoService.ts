@@ -139,6 +139,14 @@ export const unlockVault = (masterPassword: string, salt: ArrayBuffer, canary: V
 };
 
 /**
+ * Checks if the vault is currently unlocked (i.e., if a session key is cached in the worker).
+ * @returns {Promise<boolean>} A promise that resolves with true if unlocked, false otherwise.
+ */
+export const isVaultUnlocked = (): Promise<boolean> => {
+  return postCommandToWorker<boolean>('IS_UNLOCKED');
+};
+
+/**
  * Instructs the worker to securely discard the cached session key, effectively locking the vault.
  * @returns {Promise<void>} A promise that resolves when the vault is locked.
  */
