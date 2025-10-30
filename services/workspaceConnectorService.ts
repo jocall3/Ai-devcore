@@ -1,5 +1,6 @@
+```typescript
 /**
- * @file Manages the registration and execution of actions for third-party workspace connectors like Jira, Slack, etc.
+ * @file Manages the registration and execution of actions for third-party workspace connectors like Jira, Slack, GitHub, etc.
  * @version 2.0.0
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -7,6 +8,7 @@
 
 import * as vaultService from './vaultService.ts';
 import { logError, logEvent } from './telemetryService.ts';
+import { Octokit } from '@octokit/rest';
 
 /**
  * Custom error thrown when an action requires authentication but the vault is locked.
@@ -53,6 +55,35 @@ export interface WorkspaceAction {
  * @type {Map<string, WorkspaceAction>}
  */
 export const ACTION_REGISTRY: Map<string, WorkspaceAction> = new Map();
+
+let _githubClient: Octokit | null = null; // Use _ prefix for internal module-level cache
+
+/**
+ * Initializes and returns an Octokit client for GitHub API interactions.
+ * The GitHub Personal Access Token (PAT) is retrieved from the vault.
+ * @returns {Promise<Octokit>} An initialized Octokit client instance.
+ * @throws {VaultLockedError} If the vault is locked or GitHub token is not found.
+ */
+export async function getGithubClient(): Promise<Octokit> {
+  if (!vaultService.isUnlocked()) {
+    throw new VaultLockedError('Vault is locked. Unlock the vault to access GitHub credentials.');
+  }
+
+  if (_githubClient) {
+    return _githubClient;
+  }
+
+  const githubToken = await vaultService.getDecryptedCredential('github_token');
+  if (!githubToken) {
+    throw new VaultLockedError('GitHub token not found in vault. Please connect GitHub in the Workspace Connector Hub.');
+  }
+
+  _githubClient = new Octokit({
+    auth: githubToken,
+  });
+
+  return _githubClient;
+}
 
 // --- JIRA ACTIONS ---
 ACTION_REGISTRY.set('jira_create_ticket', {
@@ -137,6 +168,67 @@ ACTION_REGISTRY.set('slack_post_message', {
   }
 });
 
+// --- GITHUB ACTIONS ---
+ACTION_REGISTRY.set('github_create_pr', {
+  id: 'github_create_pr',
+  service: 'GitHub',
+  description: 'Creates a new Pull Request in a GitHub repository.',
+  requiresAuth: true,
+  getParameters: () => ({
+    owner: { type: 'string', required: true },
+    repo: { type: 'string', required: true },
+    title: { type: 'string', required: true },
+    head: { type: 'string', required: true, default: 'main' }, // Source branch
+    base: { type: 'string', required: true, default: 'main' }, // Target branch
+    body: { type: 'string', required: false }
+  }),
+  execute: async (params) => {
+    const octokit = await getGithubClient(); // Use the new function
+    const response = await octokit.pulls.create({
+      owner: params.owner,
+      repo: params.repo,
+      title: params.title,
+      head: params.head,
+      base: params.base,
+      body: params.body
+    });
+    return response.data;
+  }
+});
+
+ACTION_REGISTRY.set('github_get_repo_content', {
+  id: 'github_get_repo_content',
+  service: 'GitHub',
+  description: 'Retrieves the content of a file or directory from a GitHub repository.',
+  requiresAuth: true,
+  getParameters: () => ({
+    owner: { type: 'string', required: true },
+    repo: { type: 'string', required: true },
+    path: { type: 'string', required: true },
+    ref: { type: 'string', required: false, default: 'HEAD' } // Branch, tag, or commit SHA
+  }),
+  execute: async (params) => {
+    const octokit = await getGithubClient();
+    try {
+      const response = await octokit.repos.getContent({
+        owner: params.owner,
+        repo: params.repo,
+        path: params.path,
+        ref: params.ref
+      });
+
+      // getContent can return an array if it's a directory, or an object if it's a file.
+      // We'll return the raw data and let the consumer handle the type.
+      return response.data;
+    } catch (error: any) {
+      if (error.status === 404) {
+        throw new Error(`Content not found at path '${params.path}' in '${params.owner}/${params.repo}'.`);
+      }
+      logError(error as Error, { context: 'github_get_repo_content', params });
+      throw new Error(`Failed to get GitHub repository content: ${error.message}`);
+    }
+  }
+});
 
 /**
  * The central execution function for all workspace actions. It checks for vault status
@@ -181,3 +273,4 @@ export async function executeWorkspaceAction(actionId: string, params: any): Pro
         throw error;
     }
 }
+```
