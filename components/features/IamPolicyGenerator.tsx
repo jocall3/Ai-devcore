@@ -1,4 +1,4 @@
-```typescript
+
 import React, { useState, useCallback } from 'react';
 import { generateIamPolicyStream } from '../../services/index.ts';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
@@ -106,4 +106,3 @@ export const IamPolicyGenerator: React.FC = () => {
         </div>
     );
 };
-```
