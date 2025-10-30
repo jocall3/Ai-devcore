@@ -247,4 +247,4 @@ export async function analyzePerformanceTrace(traceData: any): Promise<string> {
     return generateContent(prompt, systemInstruction, 0.5);
 }
 
-export { getInferenceFunction, generateImageFromImageAndText, analyzeCodeForVulnerabilities, detectCodeSmells, generateTagsForCode, generateFeature, generateFullStackFeature, generateAppFeatureComponent, generatePipelineCode, createApiDocumentation, jsonToTypescriptInterface, suggestAlternativeLibraries, explainRegex, generateTechnicalSpecFromDiff, generateThemeFromDescription, generateMockData, sqlToApiEndpoints, reviewCodeStructured, generateClientFromApiSchema } from './aiService';
+export { getInferenceFunction, generateImageFromImageAndText, analyzeCodeForVulnerabilities, detectCodeSmells, generateTagsForCode, generateFeature, generateFullStackFeature, generateAppFeatureComponent, generatePipelineCode, createApiDocumentation, jsonToTypescriptInterface, suggestAlternativeLibraries, explainRegex, generateTechnicalSpecFromDiff, generateThemeFromDescription, generateMockData, sqlToApiEndpoints, reviewCodeStructured } from './aiService';
