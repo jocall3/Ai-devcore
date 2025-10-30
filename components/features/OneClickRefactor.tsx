@@ -3,6 +3,9 @@ import * as Diff from 'diff';
 import { refactorForPerformance, refactorForReadability, generateJsDoc, convertToFunctionalComponent } from '../../services/index.ts';
 import { SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 type RefactorAction = 'readability' | 'performance' | 'jsdoc' | 'functional' | 'custom';
 
@@ -41,43 +44,67 @@ export const OneClickRefactor: React.FC = () => {
     const [refactoredCode, setRefactoredCode] = useState('');
     const [loadingAction, setLoadingAction] = useState<RefactorAction | null>(null);
 
+    const { addNotification } = useNotification();
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+
     const handleRefactor = useCallback(async (action: RefactorAction) => {
         if (!code.trim()) return;
         setLoadingAction(action);
         setRefactoredCode('');
 
-        let stream;
-        switch(action) {
-            case 'readability':
-                stream = refactorForReadability(code);
-                break;
-            case 'performance':
-                stream = refactorForPerformance(code);
-                break;
-            case 'jsdoc':
-                stream = generateJsDoc(code);
-                break;
-            case 'functional':
-                stream = convertToFunctionalComponent(code);
-                break;
-            default:
-                setLoadingAction(null);
-                return;
-        }
-
         try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setLoadingAction(null);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setLoadingAction(null);
+                    return;
+                }
+            }
+
+            let stream;
+            switch(action) {
+                case 'readability':
+                    stream = refactorForReadability(code);
+                    break;
+                case 'performance':
+                    stream = refactorForPerformance(code);
+                    break;
+                case 'jsdoc':
+                    stream = generateJsDoc(code);
+                    break;
+                case 'functional':
+                    stream = convertToFunctionalComponent(code);
+                    break;
+                default:
+                    setLoadingAction(null);
+                    return;
+            }
+
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;
                 setRefactoredCode(fullResponse.replace(/^```(?:\w+\n)?/, '').replace(/```$/, ''));
             }
         } catch (e) {
+            const errorMessage = e instanceof Error ? e.message : 'Unknown error';
             console.error(e);
-            setRefactoredCode(`// Error during refactoring: ${e instanceof Error ? e.message : 'Unknown error'}`);
+            setRefactoredCode(`// Error during refactoring: ${errorMessage}`);
+            addNotification(`Refactor failed: ${errorMessage}`, 'error');
         } finally {
             setLoadingAction(null);
         }
-    }, [code]);
+    }, [code, vaultState, requestCreation, requestUnlock, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
