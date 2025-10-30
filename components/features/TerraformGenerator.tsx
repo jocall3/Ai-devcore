@@ -1,4 +1,3 @@
-```typescript
 import React, { useState, useCallback } from 'react';
 import { IAIEngineService, ICommand, IAiProvider } from '../../modules/ai-engine/i-ai-engine.service';
 import { useService } from '../../core/ioc/use-service.hook';
@@ -107,4 +106,3 @@ export const TerraformGenerator: React.FC = () => {
         </div>
     );
 };
-```
