@@ -42,6 +42,11 @@ export interface StructuredPrSummary {
     changes: string[];
 }
 
+export interface CommandResponse {
+  text: string;
+  functionCalls?: { name: string; args: any }[];
+}
+
 export interface AppUser {
   uid: string;
   displayName: string | null;
@@ -159,6 +164,14 @@ export interface EncryptedData {
 }
 
 // --- New Types for Implemented Features ---
+export interface CronParts {
+    minute: string;
+    hour: string;
+    dayOfMonth: string;
+    month: string;
+    dayOfWeek: string;
+}
+
 export interface SecurityVulnerability {
     vulnerability: string;
     severity: 'Critical' | 'High' | 'Medium' | 'Low' | 'Informational';

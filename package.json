@@ -12,8 +12,8 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@google/genai": "1.25.0",
-    "@xstate/react": "5.1.0",
+    "@google/generative-ai": "^0.14.1",
+    "@xstate/react": "6.0.0",
     "axe-core": "4.10.3",
     "diff": "8.0.2",
     "idb": "8.0.3",
@@ -21,32 +21,33 @@
     "jszip": "3.10.1",
     "marked": "16.2.1",
     "mermaid": "11.10.1",
-    "octokit": "5.0.3",
+    "octokit": "^4.0.2",
     "react": "18.3.1",
     "react-colorful": "5.6.1",
     "react-dom": "18.3.1",
-    "reflect-metadata": "0.3.0",
-    "xstate": "6.2.1"
+    "reflect-metadata": "0.2.2",
+    "xstate": "5.23.0"
   },
   "devDependencies": {
-    "@storybook/addon-essentials": "9.0.1",
-    "@storybook/addon-interactions": "9.0.1",
-    "@storybook/addon-links": "9.0.1",
-    "@storybook/blocks": "9.0.1",
-    "@storybook/react": "9.0.1",
-    "@storybook/react-vite": "9.0.1",
-    "@storybook/test": "9.0.1",
+    "@storybook/addon-essentials": "8.6.14",
+    "@storybook/addon-interactions": "8.6.14",
+    "@storybook/addon-links": "8.6.14",
+    "@storybook/blocks": "8.6.14",
+    "@storybook/react": "8.6.14",
+    "@storybook/react-vite": "8.6.14",
+    "@storybook/test": "8.6.14",
     "@tailwindcss/typography": "0.5.19",
     "@types/node": "24.3.0",
     "@types/react": "18.3.24",
     "@types/react-dom": "18.3.7",
     "@vitejs/plugin-react": "5.0.4",
     "autoprefixer": "10.4.21",
+    "typedoc-plugin-merge-modules": "7.0.0",
     "postcss": "^8.5.6",
-    "storybook": "9.0.1",
+    "storybook": "8.6.14",
     "tailwindcss": "3.4.17",
-    "typedoc": "0.26.5",
-    "typescript": "5.9.2",
-    "vite": "7.1.11"
+    "typedoc": "0.28.12",
+    "typescript": "5.8.2",
+    "vite": "^6.0.11"
   }
 }
