@@ -1,13 +1,4 @@
-/**
- * @file This service acts as the main-thread API for the credential vault.
- * It orchestrates interactions between the database (`dbService`) and the sandboxed
- * Security Core worker (`cryptoService`), ensuring that no sensitive cryptographic
- * material (like master passwords or session keys) is ever handled on the main thread.
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import * as crypto from './cryptoService.ts';
+import crypto from './cryptoService.ts';
 import * as db from './dbService.ts';
 import type { EncryptedData } from '../types.ts';
 
@@ -82,7 +73,7 @@ export const saveCredential = async (id: string, plaintext: string): Promise<voi
     if (!(await isUnlocked())) {
         throw new Error("Vault is locked. Cannot save credential.");
     }
-    const { ciphertext, iv } = await crypto.encrypt(plaintext);
+    const { ciphertext, iv } = await crypto.encrypt(id, plaintext);
     const encryptedData: EncryptedData = { id, ciphertext, iv };
     await db.saveEncryptedToken(encryptedData);
 };
@@ -103,8 +94,7 @@ export const getDecryptedCredential = async (id: string): Promise<string | null>
     }
     // The worker will throw if decryption fails, and it will auto-lock itself.
     // We just need to let the error propagate up.
-    const { ciphertext, iv } = encryptedData;
-    return crypto.decrypt({ ciphertext, iv });
+    return crypto.decrypt(encryptedData);
 };
 
 /**
