@@ -1,3 +1,4 @@
+```typescript
 import React, { useState, useCallback } from 'react';
 import { generateIamPolicyStream } from '../../services/index.ts';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
@@ -30,7 +31,10 @@ export const IamPolicyGenerator: React.FC = () => {
 
         const runGeneration = async () => {
             try {
-                const stream = generateIamPolicyStream(description, platform);
+                // The generateIamPolicyStream function expects 3 arguments: resource (string), actions (string[]), and context (string).
+                // Assuming 'description' serves as the primary resource/request, an empty array for 'actions'
+                // (as the AI is expected to infer them from the description), and 'platform' as the context.
+                const stream = generateIamPolicyStream(description, [], platform);
                 let fullResponse = '';
                 for await (const chunk of stream) {
                     fullResponse += chunk;
@@ -102,3 +106,4 @@ export const IamPolicyGenerator: React.FC = () => {
         </div>
     );
 };
+```
