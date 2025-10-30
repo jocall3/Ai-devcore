@@ -6,7 +6,7 @@
  * @license Apache-2.0
  */
 
-import { Octokit } from 'octokit';
+import { Octokit } from '@octokit/rest';
 import { initializeOctokit } from '../../../services/authService.ts';
 import { getDecryptedCredential, isUnlocked } from '../../../services/vaultService.ts';
 import * as githubService from '../../../services/githubService.ts';
