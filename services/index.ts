@@ -23,16 +23,24 @@ export * from './googleApiService.ts';
 export * from './workspaceService.ts';
 export * from './gcpService.ts';
 export * from './workspaceConnectorService.ts';
+
+// --- Type Re-exports for external consumption ---
 export type { EncryptedData, GeneratedFile, StructuredPrSummary, StructuredExplanation, SemanticColorTheme, SecurityVulnerability, CodeSmell, CustomFeature, CronParts } from '../types.ts';
+export type { IAiProvider } from './geminiService.ts'; // Exporting IAiProvider for external use
+
+// --- Local Type Imports for internal use in index.ts ---
+// These are needed for function signatures within this file itself.
+import type { StructuredExplanation, StructuredPrSummary, CronParts, SemanticColorTheme } from '../types.ts';
+import type { ICommand } from './aiService'; // Assuming ICommand is a type/interface from aiService.ts
 
 // --- AI Service Bridge ---
 // This section acts as a facade to bridge old function-based imports
 // with a new provider-based AI service architecture during a refactor.
 
-import { GeminiProvider, IAiProvider } from './geminiService.ts';
+import { GeminiProvider } from './geminiService.ts'; // IAiProvider imported as type above
 import { getDecryptedCredential } from './vaultService.ts';
-import { GoogleGenerativeAI, Part } from '@google/generative-ai'; // Corrected import for Google Generative AI client
-import type { FunctionDeclaration } from '@google/generative-ai'; // Corrected import for Google Generative AI client
+// Corrected import for Google Generative AI client to use '@google/genai'
+import { GoogleGenerativeAI, Part, FunctionDeclaration } from '@google/genai';
 
 // Singleton provider instance logic to avoid re-initializing on every call
 let provider: IAiProvider | null = null;
@@ -218,11 +226,16 @@ export async function generateCiCdConfig(platform: string, description: string):
     return generateContent(prompt, systemInstruction, 0.3);
 }
 
-export async function generateColorPalette(baseColor: string): Promise<{ colors: string[] }> {
-    const prompt = `Generate a 6-color UI palette from the base color ${baseColor}.`;
-    // Replaced Type.X with string literals
-    const schema = { type: 'object', properties: { colors: { type: 'array', items: { type: 'string' } } } };
-    return generateJson(prompt, "You are a UI design expert. Return a JSON object with a 'colors' array of 6 hex codes.", schema, 0.8);
+/**
+ * Generates a complete semantic color theme based on a base color, suitable for UI applications.
+ * This function now leverages the more comprehensive `generateSemanticTheme` to return a full theme object.
+ */
+export async function generateColorPalette(baseColor: string): Promise<SemanticColorTheme> {
+    const promptParts = [
+        { text: `Generate a complete semantic color theme (prioritize light mode, but infer dark mode if ${baseColor} suggests it) including a 4-color palette, derived from the base color ${baseColor}. Ensure accessibility ratios are good.` },
+    ];
+    // Call generateSemanticTheme which already has the complex schema and handles JSON generation.
+    return generateSemanticTheme({ parts: promptParts });
 }
 
 export async function generateCronFromDescription(description: string): Promise<CronParts> {
@@ -256,5 +269,59 @@ export async function analyzePerformanceTrace(traceData: any): Promise<string> {
     return generateContent(prompt, systemInstruction, 0.5);
 }
 
+// --- Newly added AI stream/content generation functions ---
+
+export async function* generateBugReproductionTestStream(bugDescription: string, code: string): AsyncGenerator<string> {
+    const prompt = `Generate a reproduction test for the following bug:\n\nBug Description: ${bugDescription}\n\nRelated Code:\n${code}`;
+    const systemInstruction = `You are an expert at writing minimal bug reproduction tests. Provide a complete, runnable test file in a single markdown code block.`;
+    yield* streamContent(prompt, systemInstruction, 0.5);
+}
+
+export async function* generateIamPolicyStream(resource: string, actions: string[], context: string): AsyncGenerator<string> {
+    const prompt = `Generate an IAM policy for resource "${resource}" allowing actions "${actions.join(', ')}". Context: ${context}`;
+    const systemInstruction = `You are a security expert. Provide the IAM policy in YAML or JSON format inside a markdown block.`;
+    yield* streamContent(prompt, systemInstruction, 0.4);
+}
+
+export async function* refactorForPerformance(code: string): AsyncGenerator<string> {
+    const prompt = `Refactor the following code for optimal performance:\n\n${code}`;
+    const systemInstruction = `You are an expert at optimizing code. Respond with only the refactored code in a markdown block.`;
+    yield* streamContent(prompt, systemInstruction, 0.5);
+}
+
+export async function* refactorForReadability(code: string): AsyncGenerator<string> {
+    const prompt = `Refactor the following code for improved readability and maintainability:\n\n${code}`;
+    const systemInstruction = `You are an expert at writing clean, readable code. Respond with only the refactored code in a markdown block.`;
+    yield* streamContent(prompt, systemInstruction, 0.5);
+}
+
+export async function* generateJsDoc(code: string): AsyncGenerator<string> {
+    const prompt = `Generate JSDoc comments for the following JavaScript/TypeScript code:\n\n${code}`;
+    const systemInstruction = `You are an expert at generating comprehensive JSDoc. Respond with only the code including JSDoc comments in a markdown block.`;
+    yield* streamContent(prompt, systemInstruction, 0.4);
+}
+
+export async function* convertToFunctionalComponent(code: string): AsyncGenerator<string> {
+    const prompt = `Convert the following React class component to a functional component using hooks:\n\n${code}`;
+    const systemInstruction = `You are an expert React developer. Respond with only the converted functional component code in a markdown block.`;
+    yield* streamContent(prompt, systemInstruction, 0.5);
+}
+
 // Pruned the re-export list to only include members that exist in './aiService'
-export { getInferenceFunction, generateImageFromImageAndText, analyzeCodeForVulnerabilities, detectCodeSmells, generateTagsForCode, generateFeature, generateFullStackFeature, generateAppFeatureComponent, generatePipelineCode, generateTechnicalSpecFromDiff, generateMockData } from './aiService';
+// Added generateFile, generateImage, and ICommand based on errors.
+export {
+    getInferenceFunction,
+    generateImageFromImageAndText,
+    analyzeCodeForVulnerabilities,
+    detectCodeSmells,
+    generateTagsForCode,
+    generateFeature,
+    generateFullStackFeature,
+    generateAppFeatureComponent,
+    generatePipelineCode,
+    generateTechnicalSpecFromDiff,
+    generateMockData,
+    generateFile, // Added based on error
+    generateImage, // Added based on error
+    ICommand // Added based on error, assuming it's a type or value from aiService.ts
+} from './aiService';
