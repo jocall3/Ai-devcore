@@ -1,8 +1,13 @@
+```typescript
 import React, { useState, useEffect, useRef } from 'react';
 import { PlusIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpOnSquareIcon } from '../icons.tsx';
 import { useAiPersonalities } from '../../hooks/useAiPersonalities.ts';
 import { formatSystemPromptToString } from '../../utils/promptUtils.ts';
-import { aiService } from '../../services/aiService.ts';
+// Fix: Changed to a default import.
+// The error "Module '"../../services/aiService.ts"' has no exported member 'aiService'."
+// suggests that 'aiService' might be exported as a default from that module,
+// which is a common pattern for singleton service instances.
+import aiService from '../../services/aiService.ts';
 import { downloadJson } from '../../services/fileUtils.ts';
 import type { SystemPrompt } from '../../types.ts';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
@@ -66,7 +71,7 @@ export const AiPersonalityForge: React.FC = () => {
         setIsStreaming(true);
 
         try {
-            const stream = aiService.execute<AsyncGenerator<string, void, unknown>>({
+            const stream = await aiService.execute<AsyncGenerator<string, void, unknown>>({
                 execute: (provider) => provider.streamContent(testbedInput, systemInstruction, 0.7)
             });
 
@@ -186,3 +191,4 @@ export const AiPersonalityForge: React.FC = () => {
         </div>
     );
 };
+```
