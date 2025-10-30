@@ -1,3 +1,4 @@
+```typescript
 import React, { useState, useCallback, useEffect } from 'react';
 import { sendEmail } from '../../services/index.ts';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
@@ -5,13 +6,18 @@ import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 import { MailIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
-import { aiService, ICommand, IAiProvider } from '../../services/aiService.ts';
+
+// Assuming these are the new locations and names for the AI engine components
+import { aiEngineServiceInstance } from '../../modules/ai-engine/ai-engine.service';
+import { ICommand } from '../../modules/ai-engine/commands/i-command.interface';
+import { IAIEngineProvider } from '../../modules/ai-engine/providers/i-ai-engine-provider.interface';
 
 // Command for generating the weekly digest
 class GenerateWeeklyDigestCommand implements ICommand<string> {
     constructor(private commitLogs: string, private telemetry: object) {}
   
-    execute(provider: IAiProvider): Promise<string> {
+    // The execute method now expects the IAIEngineProvider from the AI engine
+    execute(provider: IAIEngineProvider): Promise<string> {
       const prompt = `Generate a professional, well-formatted weekly digest email in HTML format.
   
       The email should have a clear subject, a brief introduction, a summary of development activities based on the commit logs, a section for key performance metrics from telemetry, and a friendly closing.
@@ -86,7 +92,8 @@ export const WeeklyDigestGenerator: React.FC = () => {
             }
 
             const command = new GenerateWeeklyDigestCommand(dummyCommitLogs, dummyTelemetry);
-            const html = await aiService.execute<string>(command);
+            // Use the refactored AI engine instance
+            const html = await aiEngineServiceInstance.execute<string>(command);
             setEmailHtml(html);
             addNotification('Digest content generated!', 'success');
         } catch (e) {
@@ -158,3 +165,4 @@ export const WeeklyDigestGenerator: React.FC = () => {
         </div>
     );
 };
+```
