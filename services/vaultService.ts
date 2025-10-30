@@ -1,4 +1,4 @@
-import crypto from './cryptoService.ts'; // Changed import from `* as crypto` to `default import`
+import * as crypto from './cryptoService.ts'; // Changed import from `default import` to `namespace import`
 import * as db from './dbService.ts';
 import type { EncryptedData } from '../types.ts';
 
