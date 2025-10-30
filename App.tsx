@@ -1,23 +1,20 @@
 import React, { Suspense, useMemo, useState, useEffect, useCallback } from 'react';
-import { ErrorBoundary } from './components/ErrorBoundary';
-import { useGlobalState } from './contexts/GlobalStateContext.tsx';
-import { logEvent } from './services/telemetryService';
-import { ALL_FEATURES, FEATURES_MAP } from './components/features/index.tsx';
-import { ViewType, SidebarItem, AppUser } from './types';
-import { LeftSidebar } from './components/LeftSidebar.tsx';
-import { StatusBar } from './components/StatusBar.tsx';
-import { CommandPalette } from './components/CommandPalette.tsx';
-import { SettingsView } from './components/SettingsView.tsx';
-import { Cog6ToothIcon, HomeIcon, FolderIcon, RectangleGroupIcon } from './components/icons.tsx';
-import { AiCommandCenter } from './components/features/AiCommandCenter.tsx';
-import { NotificationProvider } from './contexts/NotificationContext.tsx';
-import { useTheme } from './hooks/useTheme';
-import { VaultProvider } from './components/vault/VaultProvider.tsx';
-import { initGoogleAuth } from './services/googleAuthService';
-import { ActionManager } from './components/ActionManager.tsx';
-import { useVaultModal } from './contexts/VaultModalContext.tsx';
-import { isVaultInitialized } from './services/vaultService.ts';
-
+import { ErrorBoundary } from '@/components/ErrorBoundary.tsx';
+import { useGlobalState } from '@/contexts/GlobalStateContext.tsx';
+import { logEvent } from '@/services/telemetryService.ts';
+import { ALL_FEATURES, FEATURES_MAP } from '@/components/features/index.tsx';
+import { ViewType, SidebarItem, AppUser } from '@/types.ts';
+import { LeftSidebar } from '@/components/LeftSidebar.tsx';
+import { StatusBar } from '@/components/StatusBar.tsx';
+import { CommandPalette } from '@/components/CommandPalette.tsx';
+import { SettingsView } from '@/components/SettingsView.tsx';
+import { Cog6ToothIcon, HomeIcon, FolderIcon, RectangleGroupIcon } from '@/components/icons.tsx';
+import { AiCommandCenter } from '@/components/features/AiCommandCenter.tsx';
+import { NotificationProvider } from '@/contexts/NotificationContext.tsx';
+import { useTheme } from '@/hooks/useTheme.ts';
+import { VaultProvider } from '@/components/vault/VaultProvider.tsx';
+import { initGoogleAuth } from '@/services/googleAuthService.ts';
+import { ActionManager } from '@/components/ActionManager.tsx';
 
 export const LoadingIndicator: React.FC = () => (
     <div className="w-full h-full flex items-center justify-center bg-surface">
@@ -68,19 +65,6 @@ const AppContent: React.FC = () => {
     const { state, dispatch } = useGlobalState();
     const { activeView, viewProps, hiddenFeatures } = state;
     const [isCommandPaletteOpen, setCommandPaletteOpen] = useState(false);
-    const { requestUnlock } = useVaultModal();
-
-    useEffect(() => {
-        const checkVaultStatus = async () => {
-            const initialized = await isVaultInitialized();
-            dispatch({ type: 'SET_VAULT_STATE', payload: { isInitialized: initialized } });
-            if (initialized) {
-                // If vault exists, automatically prompt for unlock on startup.
-                await requestUnlock();
-            }
-        };
-        checkVaultStatus();
-    }, [dispatch, requestUnlock]);
   
     useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import JSZip from 'jszip';
-import { getAllFiles } from '../services/dbService.ts';
+import { getAllFiles } from '../services/index.ts';
 import { ArrowDownTrayIcon } from './icons.tsx';
 import { LoadingSpinner } from './shared/index.tsx';
 

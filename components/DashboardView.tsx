@@ -1,23 +1,12 @@
 import React from 'react';
-import { MachineView } from './MachineView.tsx';
-import { FeaturePalette } from './FeaturePalette.tsx';
-import type { ViewType } from '../types.ts';
+import { DesktopView } from './desktop/DesktopView';
 
 interface DashboardViewProps {
-  onNavigate: (view: ViewType, props?: any) => void;
+  openFeatureId?: string;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate }) => {
-  const handleFeatureSelect = (featureId: string) => {
-    onNavigate(featureId);
-  };
-
+export const DashboardView: React.FC<DashboardViewProps> = ({ openFeatureId }) => {
   return (
-    <div className="h-full flex flex-row overflow-hidden">
-      <div className="flex-grow">
-        <MachineView />
-      </div>
-      <FeaturePalette onFeatureSelect={handleFeatureSelect} />
-    </div>
+    <DesktopView openFeatureId={openFeatureId} />
   );
 };

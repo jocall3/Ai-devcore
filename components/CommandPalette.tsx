@@ -86,14 +86,14 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ isOpen, onClose,
                    onSelect(item.id as ViewType);
                 }}
                 className={`flex items-center justify-between p-3 rounded-md cursor-pointer ${
-                  selectedIndex === index ? 'bg-primary/10 text-primary' : 'hover:bg-gray-100'
+                  selectedIndex === index ? 'bg-primary/10 text-primary' : 'hover:bg-gray-100 dark:hover:bg-slate-700'
                 }`}
               >
                 <div className="flex items-center space-x-3">
                     <div className="text-text-secondary">{item.icon}</div>
                     <span className="text-text-primary">{item.name}</span>
                 </div>
-                <span className="text-xs text-text-secondary bg-gray-100 px-2 py-1 rounded">{item.category}</span>
+                <span className="text-xs text-text-secondary bg-gray-100 dark:bg-slate-700 px-2 py-1 rounded">{item.category}</span>
               </li>
             ))
           ) : (
