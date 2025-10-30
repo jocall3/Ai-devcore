@@ -2,6 +2,9 @@ import React, { useState, useCallback } from 'react';
 import { streamContent } from '../../services/index.ts';
 import { MailIcon, SparklesIcon, XMarkIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const mockEmail = {
     from: 'Alice <alice@example.com>',
@@ -14,12 +17,17 @@ export const GmailAddonSimulator: React.FC = () => {
     const [isComposeOpen, setComposeOpen] = useState(false);
     const [generatedReply, setGeneratedReply] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
 
     const handleGenerateReply = useCallback(async () => {
         setIsGenerating(true);
         setGeneratedReply('');
         setComposeOpen(true);
-        try {
+
+        const executeGeneration = async () => {
             const prompt = `Generate a professional and friendly reply to the following email. Acknowledge the update and answer the question by stating that only the 'last_login' column (as a DATETIME) is needed for now.\n\nEMAIL:\n${mockEmail.body}`;
             const stream = streamContent(prompt, "You are a helpful assistant writing a professional email reply.", 0.7);
             let fullResponse = '';
@@ -27,13 +35,31 @@ export const GmailAddonSimulator: React.FC = () => {
                 fullResponse += chunk;
                 setGeneratedReply(fullResponse);
             }
+        };
+
+        try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    throw new Error('Vault setup is required to use AI features.');
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    throw new Error('Vault must be unlocked to use AI features.');
+                }
+            }
+            await executeGeneration();
         } catch(e) {
-            setGeneratedReply(`Error: ${e instanceof Error ? e.message : 'Could not generate reply.'}`);
+            const errorMessage = e instanceof Error ? e.message : 'Could not generate reply.';
+            setGeneratedReply(`Error: ${errorMessage}`);
+            addNotification(errorMessage, 'error');
         }
         finally {
             setIsGenerating(false);
         }
-    }, []);
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
     const ComposeModal = () => (
         <div className="absolute inset-0 bg-black/30 backdrop-blur-sm flex justify-center items-center p-4 z-20">
