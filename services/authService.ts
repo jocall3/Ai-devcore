@@ -1,66 +1,97 @@
 /**
  * Service for GitHub authentication and Octokit client management.
- * This service provides stateless utility functions for creating authenticated Octokit clients
- * and validating tokens. It does not manage state or directly handle credential storage.
+ * This service provides methods for creating authenticated Octokit clients
+ * and validating tokens by interacting with the secure vault.
+ * It is designed to be used via dependency injection.
  */
 
 import { Octokit } from '@octokit/rest';
-import type { GitHubUser as User } from '../types.ts';
-import { logEvent } from './telemetryService.ts';
+import { injectable, inject } from 'inversify';
+import 'reflect-metadata';
+import { TYPES } from '../core/di/types';
+import { SecurityCoreService } from '../modules/security-core/security-core.service';
+import { VaultStatus } from '../modules/security-core/types';
+import type { GitHubUser } from '../types';
+import { logEvent } from './telemetryService';
 
 /**
- * Creates a new, stateless Octokit instance with the provided token.
- * This function should be called with a plaintext token that has been securely
- * decrypted from the vault just before it is needed.
- *
- * @param {string} token The plaintext GitHub Personal Access Token.
- * @returns {Octokit} A new Octokit instance, authenticated and ready to use.
- * @throws {Error} If no token is provided, preventing unauthenticated client creation.
- * @example
- * import { initializeOctokit } from './authService';
- * import { getDecryptedCredential } from './vaultService';
- *
- * async function fetchUserRepos() {
- *   // UI/service logic should handle the locked state, for example,
- *   // by prompting the user to unlock the vault before calling this.
- *   const token = await getDecryptedCredential('github_pat');
- *   if (token) {
- *     const octokit = initializeOctokit(token);
- *     const { data: repos } = await octokit.request('GET /user/repos');
- *     return repos;
- *   }
- *   return [];
- * }
+ * @interface IAuthService
+ * @description Defines the contract for the authentication service, primarily for GitHub.
  */
-export const initializeOctokit = (token: string): Octokit => {
-    if (!token) {
-        throw new Error("Cannot initialize Octokit without a token.");
+export interface IAuthService {
+    /**
+     * Creates and returns an authenticated Octokit client.
+     * It retrieves the GitHub PAT from the secure vault.
+     * @returns {Promise<Octokit>} An authenticated Octokit instance.
+     * @throws {Error} If the vault is locked or the token is not found.
+     */
+    getAuthenticatedOctokit(): Promise<Octokit>;
+
+    /**
+     * Validates a plaintext token by fetching the associated user profile.
+     * @param {string} token The plaintext GitHub token to validate.
+     * @returns {Promise<GitHubUser>} The user's profile information.
+     * @throws {Error} If the token is invalid or the API request fails.
+     */
+    validateToken(token: string): Promise<GitHubUser>;
+}
+
+/**
+ * @class AuthService
+ * @implements {IAuthService}
+ * @description Manages GitHub authentication logic, including creating authenticated
+ * API clients by securely retrieving credentials.
+ * @injectable
+ */
+@injectable()
+export class AuthService implements IAuthService {
+    
+    /**
+     * @constructor
+     * @param {SecurityCoreService} securityCore - The injected security core service for vault access.
+     */
+    constructor(
+        @inject(TYPES.SecurityCore) private readonly securityCore: SecurityCoreService
+    ) {}
+
+    /**
+     * Creates a new, stateless Octokit instance with the provided token.
+     * @private
+     * @param {string} token The plaintext GitHub Personal Access Token.
+     * @returns {Octokit} A new authenticated Octokit instance.
+     */
+    private initializeOctokit(token: string): Octokit {
+        if (!token) {
+            throw new Error("Cannot initialize Octokit without a token.");
+        }
+        logEvent('octokit_initialized');
+        return new Octokit({ auth: token, request: { headers: { 'X-GitHub-Api-Version': '2022-11-28' } } });
     }
-    logEvent('octokit_initialized');
-    return new Octokit({ auth: token, request: { headers: { 'X-GitHub-Api-Version': '2022-11-28' } } });
-};
 
-/**
- * Validates a plaintext token by fetching the associated user profile from GitHub.
- * This is useful for confirming that a token is valid and for retrieving user information
- * when establishing a new connection in the application.
- *
- * @param {string} token The plaintext GitHub token to validate.
- * @returns {Promise<User>} A promise that resolves to the user's profile information.
- * @throws {Error} If the token is invalid or the GitHub API request fails.
- * @example
- * try {
- *   const userProfile = await validateToken('ghp_xxxxxxxx');
- *   console.log(`Token is valid for user: ${userProfile.login}`);
- *   // Store user profile in global state or similar
- * } catch (error) {
- *   console.error('Token validation failed.', error);
- * }
- */
-export const validateToken = async (token: string): Promise<User> => {
-    // Create a temporary, stateless Octokit instance for validation purposes.
-    const tempOctokit = new Octokit({ auth: token });
-    const { data: user } = await tempOctokit.request('GET /user');
-    // Cast to our internal User type as the raw data from Octokit is more complex.
-    return user as unknown as User;
-};
+    /**
+     * @inheritdoc
+     */
+    public async getAuthenticatedOctokit(): Promise<Octokit> {
+        if (this.securityCore.getStatus() !== VaultStatus.UNLOCKED) {
+             throw new Error("Vault is locked. Please unlock it to use GitHub integrations.");
+        }
+        
+        const token = await this.securityCore.getDecryptedCredential('github_pat');
+        
+        if (!token) {
+            throw new Error("GitHub token not found. Please connect your GitHub account in the Workspace Connector Hub.");
+        }
+        
+        return this.initializeOctokit(token);
+    }
+    
+    /**
+     * @inheritdoc
+     */
+    public async validateToken(token: string): Promise<GitHubUser> {
+        // This method can use a temporary client as it's for validation before a token is stored.
+        const tempOctokit = new Octokit({ auth: token });
+        const { data: user } = await tempOctokit.request('GET /user');
+        return user as unknown as GitHubUser;
+    }
+}
