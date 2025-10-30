@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { SparklesIcon, DigitalWhiteboardIcon } from '../icons.tsx';
 import { useLocalStorage } from '../../hooks/useLocalStorage.ts';
-import { summarizeNotesStream } from '../../services/index.ts';
+import { streamContent } from '../../services/index.ts';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { MarkdownRenderer } from '../shared/index.tsx';
 
@@ -28,7 +28,9 @@ export const DigitalWhiteboard: React.FC = () => {
         setSummary('');
         try {
             const allNotesText = notes.map((n: Note) => `- ${n.text}`).join('\n');
-            const stream = summarizeNotesStream(allNotesText);
+            const prompt = `Summarize these notes into a concise overview:\n\n${allNotesText}`;
+            const systemInstruction = "You are a helpful assistant that summarizes notes.";
+            const stream = streamContent(prompt, systemInstruction);
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;
@@ -114,7 +116,7 @@ export const DigitalWhiteboard: React.FC = () => {
                             className="w-full h-full bg-transparent resize-none focus:outline-none font-medium p-1"
                         />
                         <div data-role="button" className="flex-shrink-0 flex justify-center gap-1 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {colors.map((c, i) => <button key={c} onClick={() => updateNote(note.id, { color: c })} className={`w-4 h-4 rounded-full ${c} border border-black/20 ${note.color === c ? 'ring-2 ring-offset-1 ring-black/50' : ''}`}/>)}
+                            {colors.map((c) => <button key={c} onClick={() => updateNote(note.id, { color: c })} className={`w-4 h-4 rounded-full ${c} border border-black/20 ${note.color === c ? 'ring-2 ring-offset-1 ring-black/50' : ''}`}/>)}
                         </div>
                     </div>
                 ))}

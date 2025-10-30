@@ -1,10 +1,13 @@
 import React, { useState, useCallback } from 'react';
-import { reviewCodeStream } from '../../services/index.ts';
+import { streamContent } from '../../services/index.ts';
 import { useAiPersonalities } from '../../hooks/useAiPersonalities.ts';
 import { formatSystemPromptToString } from '../../utils/promptUtils.ts';
 import { CpuChipIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { MarkdownRenderer } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const exampleCode = `function UserList(users) {
   if (users.length = 0) {
@@ -26,6 +29,11 @@ export const CodeReviewBot: React.FC = () => {
     const [personalities] = useAiPersonalities();
     const [selectedPersonalityId, setSelectedPersonalityId] = useState<string>('default');
 
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
     const handleGenerate = useCallback(async () => {
         if (!code.trim()) {
             setError('Please enter some code to review.');
@@ -35,16 +43,34 @@ export const CodeReviewBot: React.FC = () => {
         setError('');
         setReview('');
 
-        let systemInstruction: string | undefined = undefined;
-        if (selectedPersonalityId !== 'default') {
-            const personality = personalities.find(p => p.id === selectedPersonalityId);
-            if (personality) {
-                systemInstruction = formatSystemPromptToString(personality);
-            }
-        }
-
         try {
-            const stream = reviewCodeStream(code, systemInstruction);
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
+            let systemInstruction: string | undefined = "You are a senior software engineer performing a code review. You are meticulous, helpful, and provide constructive feedback.";
+            if (selectedPersonalityId !== 'default') {
+                const personality = personalities.find(p => p.id === selectedPersonalityId);
+                if (personality) {
+                    systemInstruction = formatSystemPromptToString(personality);
+                }
+            }
+
+            const prompt = `Review the following code snippet for bugs, style issues, and potential improvements. Provide feedback in markdown format.\n\n\`\`\`\n${code}\n\`\`\``;
+            const stream = streamContent(prompt, systemInstruction, 0.5);
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;
@@ -53,10 +79,11 @@ export const CodeReviewBot: React.FC = () => {
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
             setError(`Failed to get review: ${errorMessage}`);
+            addNotification(errorMessage, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [code, selectedPersonalityId, personalities]);
+    }, [code, selectedPersonalityId, personalities, vaultState, requestCreation, requestUnlock, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">

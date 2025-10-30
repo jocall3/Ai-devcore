@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getAllFiles, getFileByPath } from '../../services/dbService.ts';
+import { getAllFiles } from '../../services/dbService.ts';
 import type { GeneratedFile } from '../../types.ts';
 import { CloudIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
@@ -42,7 +42,7 @@ export const DeploymentPreview: React.FC = () => {
                 }
                 
                 // Replace relative paths in index.html
-                content = content.replace(/(href|src)=["'](\.?\/)?([^"']+)["']/g, (match, attr, prefix, path) => {
+                content = content.replace(/(href|src)=["'](\.\/)?([^"]+)["']/g, (match, attr, _prefix, path) => {
                     const blobUrl = blobUrlMap.get(path);
                     return blobUrl ? `${attr}="${blobUrl}"` : match;
                 });
