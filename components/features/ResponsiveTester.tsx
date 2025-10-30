@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { EyeIcon } from '../icons.tsx';
+import { EyeIcon } from '@/components/icons.tsx';
 
 const devices = {
     'iPhone 12': { width: 390, height: 844 },
@@ -48,14 +48,14 @@ export const ResponsiveTester: React.FC = () => {
             </form>
             <div className="bg-surface p-2 rounded-lg flex flex-wrap justify-center items-center gap-2 mb-4 border border-border">
                 {Object.keys(devices).map(name => (
-                    <button key={name} onClick={() => setSize(devices[name as DeviceName])} className={`px-3 py-1 rounded-md text-sm ${JSON.stringify(size) === JSON.stringify(devices[name as DeviceName]) ? 'bg-primary/10 text-primary font-semibold' : 'hover:bg-gray-100'}`}>{name}</button>
+                    <button key={name} onClick={() => setSize(devices[name as DeviceName])} className={`px-3 py-1 rounded-md text-sm ${JSON.stringify(size) === JSON.stringify(devices[name as DeviceName]) ? 'bg-primary/10 text-primary font-semibold' : 'hover:bg-gray-100 dark:hover:bg-slate-700'}`}>{name}</button>
                 ))}
                 <div className="flex items-center gap-1 ml-4">
-                    <input type="number" value={typeof size.width === 'number' ? size.width : ''} onChange={e => setSize({ ...size, width: Number(e.target.value) })} className="w-20 px-2 py-1 bg-gray-100 border border-border rounded-md text-sm"/>
+                    <input type="number" value={typeof size.width === 'number' ? size.width : ''} onChange={e => setSize({ ...size, width: Number(e.target.value) })} className="w-20 px-2 py-1 bg-background border border-border rounded-md text-sm"/>
                     <span className="text-sm text-text-secondary">x</span>
-                    <input type="number" value={typeof size.height === 'number' ? size.height : ''} onChange={e => setSize({ ...size, height: Number(e.target.value) })} className="w-20 px-2 py-1 bg-gray-100 border border-border rounded-md text-sm"/>
+                    <input type="number" value={typeof size.height === 'number' ? size.height : ''} onChange={e => setSize({ ...size, height: Number(e.target.value) })} className="w-20 px-2 py-1 bg-background border border-border rounded-md text-sm"/>
                 </div>
-                 <button onClick={handleRotate} className="px-3 py-1 rounded-md text-sm hover:bg-gray-100" title="Rotate">🔄</button>
+                 <button onClick={handleRotate} className="px-3 py-1 rounded-md text-sm hover:bg-gray-100 dark:hover:bg-slate-700" title="Rotate">🔄</button>
             </div>
             <div className="flex-grow bg-background rounded-lg p-4 overflow-auto border border-border">
                 <iframe key={displayUrl} src={displayUrl} style={{ width: size.width, height: size.height }} className="bg-white border-4 border-gray-300 rounded-md transition-all duration-300 shadow-lg mx-auto" title="Responsive Preview"/>

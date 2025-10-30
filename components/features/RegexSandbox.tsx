@@ -4,6 +4,7 @@ import { BeakerIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 
 const commonPatterns = [
     { name: 'Email', pattern: '/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.{2,}/g' },
@@ -39,7 +40,9 @@ export const RegexSandbox: React.FC<{ initialPrompt?: string }> = ({ initialProm
     const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     
-    const { requestUnlock } = useVaultModal();
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
     const { addNotification } = useNotification();
 
     const { matches, parseError } = useMemo(() => {
@@ -52,41 +55,43 @@ export const RegexSandbox: React.FC<{ initialPrompt?: string }> = ({ initialProm
         } catch (e) { return { matches: null, parseError: e instanceof Error ? e.message : 'Unknown error.' }; }
     }, [pattern, testString]);
 
-    const generate = async (prompt: string) => {
-        const stream = generateRegExStream(prompt);
-        let fullResponse = '';
-        for await (const chunk of stream) { fullResponse += chunk; }
-        setPattern(fullResponse.trim().replace(/^`+|`+$/g, ''));
-    };
-    
     const handleGenerateRegex = useCallback(async (p: string) => {
         if (!p) return;
         setIsAiLoading(true);
         setError(null);
         try {
-            await generate(p);
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsAiLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsAiLoading(false);
+                    return;
+                }
+            }
+
+            const stream = generateRegExStream(p);
+            let fullResponse = '';
+            for await (const chunk of stream) { 
+                fullResponse += chunk; 
+            }
+            setPattern(fullResponse.trim().replace(/^`+|`+$/g, ''));
+
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            if (errorMessage.includes('Vault is locked')) {
-                addNotification('Your vault is locked. Please unlock it to use AI features.', 'info');
-                const unlocked = await requestUnlock();
-                if (unlocked) {
-                    try {
-                        await generate(p); // Retry
-                    } catch (retryErr) {
-                        const retryMsg = retryErr instanceof Error ? retryErr.message : 'Unknown retry error.';
-                        setError(retryMsg);
-                        addNotification(`Error: ${retryMsg}`, 'error');
-                    }
-                }
-            } else {
-                setError(errorMessage);
-                addNotification(`Error: ${errorMessage}`, 'error');
-            }
+            setError(errorMessage);
+            addNotification(`Error: ${errorMessage}`, 'error');
         } finally {
             setIsAiLoading(false);
         }
-    }, [addNotification, requestUnlock]);
+    }, [addNotification, requestUnlock, requestCreation, vaultState]);
 
     useEffect(() => { if (initialPrompt) handleGenerateRegex(initialPrompt); }, [initialPrompt, handleGenerateRegex]);
 
