@@ -3,6 +3,9 @@ import { detectCodeSmells } from '../../services/index.ts';
 import type { CodeSmell } from '../../types.ts';
 import { MagnifyingGlassIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const exampleCode = `class DataProcessor {
     process(data) {
@@ -36,6 +39,11 @@ export const TechDebtSonar: React.FC = () => {
     const [smells, setSmells] = useState<CodeSmell[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
 
     const handleScan = useCallback(async () => {
         if (!code.trim()) {
@@ -45,15 +53,35 @@ export const TechDebtSonar: React.FC = () => {
         setIsLoading(true);
         setError('');
         setSmells([]);
+        
         try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
             const result = await detectCodeSmells(code);
             setSmells(result);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            setError(errorMessage);
+            addNotification(errorMessage, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [code]);
+    }, [code, vaultState, requestCreation, requestUnlock, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">

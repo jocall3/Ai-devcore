@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { CodeBracketSquareIcon, ArrowDownTrayIcon } from '../icons.tsx';
-import { downloadFile } from '../../services/fileUtils.ts';
+import { downloadFile } from '../../services/index.ts';
 
 const initialPath = "M 20 80 Q 100 20 180 80 T 340 80";
 
@@ -76,7 +76,7 @@ export const SvgPathEditor: React.FC = () => {
                 <div className="flex flex-col h-full overflow-y-auto">
                     <div className="flex justify-between items-center mb-2">
                         <label htmlFor="path-input" className="text-sm font-medium text-text-secondary">Path Data (d attribute)</label>
-                         <button onClick={handleDownload} className="flex items-center gap-1 px-3 py-1 bg-gray-100 text-xs rounded-md hover:bg-gray-200">
+                         <button onClick={handleDownload} className="flex items-center gap-1 px-3 py-1 bg-gray-100 dark:bg-slate-700 text-xs rounded-md hover:bg-gray-200 dark:hover:bg-slate-600">
                             <ArrowDownTrayIcon className="w-4 h-4"/> Download SVG
                         </button>
                     </div>
