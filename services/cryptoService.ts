@@ -41,7 +41,7 @@ const pendingRequests = new Map<string, { resolve: (value: any) => void, reject:
  * @example
  * initSecurityCore();
  */
-export function initSecurityCore(): void {
+function initSecurityCore(): void {
   if (worker) {
     console.warn('Security Core Worker is already initialized.');
     return;
@@ -113,7 +113,7 @@ function postCommandToWorker<T>(command: string, payload: any = {}): Promise<T> 
  * This is a safe operation to perform on the main thread and is needed before vault initialization.
  * @returns {ArrayBuffer} A new 16-byte salt.
  */
-export const generateSalt = (): ArrayBuffer => {
+const generateSalt = (): ArrayBuffer => {
   return window.crypto.getRandomValues(new Uint8Array(16)).buffer;
 };
 
@@ -123,7 +123,7 @@ export const generateSalt = (): ArrayBuffer => {
  * @param {ArrayBuffer} salt - The newly generated salt.
  * @returns {Promise<{ canary: VaultCanary }>} A promise that resolves with the encrypted canary for verification.
  */
-export const initializeVault = (masterPassword: string, salt: ArrayBuffer): Promise<{ canary: VaultCanary }> => {
+const initializeVault = (masterPassword: string, salt: ArrayBuffer): Promise<{ canary: VaultCanary }> => {
   return postCommandToWorker('INIT_VAULT', { masterPassword, salt });
 };
 
@@ -135,7 +135,7 @@ export const initializeVault = (masterPassword: string, salt: ArrayBuffer): Prom
  * @param {VaultCanary} canary - The encrypted canary for password verification.
  * @returns {Promise<void>} A promise that resolves on successful unlock.
  */
-export const unlockVault = (masterPassword: string, salt: ArrayBuffer, canary: VaultCanary): Promise<void> => {
+const unlockVault = (masterPassword: string, salt: ArrayBuffer, canary: VaultCanary): Promise<void> => {
   return postCommandToWorker('UNLOCK_VAULT', { masterPassword, salt, canary });
 };
 
@@ -143,7 +143,7 @@ export const unlockVault = (masterPassword: string, salt: ArrayBuffer, canary: V
  * Checks if the vault is currently unlocked (i.e., if a session key is cached in the worker).
  * @returns {Promise<boolean>} A promise that resolves with true if unlocked, false otherwise.
  */
-export const isVaultUnlocked = (): Promise<boolean> => {
+const isVaultUnlocked = (): Promise<boolean> => {
   return postCommandToWorker<boolean>('IS_UNLOCKED');
 };
 
@@ -151,7 +151,7 @@ export const isVaultUnlocked = (): Promise<boolean> => {
  * Instructs the worker to securely discard the cached session key, effectively locking the vault.
  * @returns {Promise<void>} A promise that resolves when the vault is locked.
  */
-export const lockVault = (): Promise<void> => {
+const lockVault = (): Promise<void> => {
   return postCommandToWorker('LOCK_VAULT');
 };
 
@@ -161,7 +161,7 @@ export const lockVault = (): Promise<void> => {
  * @param {string} plaintext - The data to encrypt.
  * @returns {Promise<EncryptedData>} A promise that resolves with the encrypted data structure, including id, ciphertext, and iv.
  */
-export const encrypt = (id: string, plaintext: string): Promise<EncryptedData> => {
+const encrypt = (id: string, plaintext: string): Promise<EncryptedData> => {
   return postCommandToWorker<EncryptedData>('ENCRYPT', { id, plaintext });
 };
 
@@ -170,6 +170,18 @@ export const encrypt = (id: string, plaintext: string): Promise<EncryptedData> =
  * @param {EncryptedData} data - The encrypted data object to decrypt.
  * @returns {Promise<{ id: string; plaintext: string }>} A promise that resolves with the original ID and decrypted plaintext.
  */
-export const decrypt = (data: EncryptedData): Promise<{ id: string; plaintext: string }> => {
+const decrypt = (data: EncryptedData): Promise<{ id: string; plaintext: string }> => {
   return postCommandToWorker<{ id: string; plaintext: string }>('DECRYPT', data);
+};
+
+// Export all functions as a default object to satisfy `import crypto from './cryptoService.ts';`
+export default {
+  initSecurityCore,
+  generateSalt,
+  initializeVault,
+  unlockVault,
+  isVaultUnlocked,
+  lockVault,
+  encrypt,
+  decrypt,
 };
