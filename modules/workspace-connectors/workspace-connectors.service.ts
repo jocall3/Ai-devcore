@@ -1,4 +1,4 @@
-```typescript
+
 /**
  * @fileoverview This file defines the Workspace Connector Service module.
  * This service acts as a centralized command handler for all actions related to
@@ -315,4 +315,3 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
     this.actionRegistry.set(slackPostMessageAction.id, slackPostMessageAction);
   }
 }
-```
