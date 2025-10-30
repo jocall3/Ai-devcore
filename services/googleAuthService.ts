@@ -101,7 +101,7 @@ export function initGoogleAuth(callback: (user: AppUser | null) => void) {
       })();
   }
   
-  tokenClient = google.accounts.oauth2.initTokenClient({
+  tokenClient = (google.accounts as any).oauth2.initTokenClient({
     client_id: GOOGLE_CLIENT_ID,
     scope: SCOPES,
     callback: async (tokenResponse: any) => {
@@ -161,8 +161,8 @@ export function signInWithGoogle() {
  */
 export function signOutUser() {
   const token = sessionStorage.getItem('google_access_token');
-  if (token && window.google?.accounts?.oauth2) {
-      google.accounts.oauth2.revoke(token, () => {
+  if (token && (window.google?.accounts as any)?.oauth2) {
+      (google.accounts as any).oauth2.revoke(token, () => {
         console.log('Google token revoked.');
       });
   }

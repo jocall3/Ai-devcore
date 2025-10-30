@@ -1,67 +1,19 @@
 /**
+ * @file This service acts as the main-thread API for the credential vault.
+ * It orchestrates interactions between the database (`dbService`) and the sandboxed
+ * Security Core worker (`cryptoService`), ensuring that no sensitive cryptographic
+ * material (like master passwords or session keys) is ever handled on the main thread.
  * @license
  * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 
 import * as crypto from './cryptoService.ts';
 import * as db from './dbService.ts';
 import type { EncryptedData } from '../types.ts';
 
-let sessionKey: CryptoKey | null = null;
-let sessionTimeoutId: number | null = null;
-
-// 30 minutes in milliseconds
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
-
 /**
- * A callback function to be invoked when the vault's lock state changes.
- * @param isUnlocked - True if the vault is unlocked, false otherwise.
- */
-type StateChangeCallback = (isUnlocked: boolean) => void;
-let onStateChangeCallback: StateChangeCallback | null = null;
-
-/**
- * Notifies registered listeners about a change in the vault's lock state.
- * @param {boolean} isUnlocked - The new lock state.
- * @private
- */
-const notifyStateChange = (isUnlocked: boolean) => {
-    onStateChangeCallback?.(isUnlocked);
-};
-
-/**
- * Resets the session timeout timer. Any interaction with the vault should call this
- * to keep the session active.
- * @private
- */
-const resetSessionTimeout = () => {
-    if (sessionTimeoutId) {
-        clearTimeout(sessionTimeoutId);
-    }
-    sessionTimeoutId = window.setTimeout(() => {
-        console.log("Vault session timed out. Locking vault automatically.");
-        lockVault();
-    }, SESSION_TIMEOUT_MS);
-};
-
-/**
- * Registers a callback function to be called whenever the vault's lock state changes.
- * This allows the UI to stay in sync with the vault's internal state.
- * @param {StateChangeCallback} callback - The function to call on state change.
- * @example
- * registerOnStateChange(isUnlocked => {
- *   // dispatch global state update
- * });
- */
-export const registerOnStateChange = (callback: StateChangeCallback) => {
-    onStateChangeCallback = callback;
-};
-
-/**
- * Checks if the vault has been initialized with a master password.
+ * Checks if the vault has been initialized with a master password by looking for a salt in the database.
  * @returns {Promise<boolean>} A promise that resolves to true if initialized, false otherwise.
- * @example
- * const initialized = await isVaultInitialized();
  */
 export const isVaultInitialized = async (): Promise<boolean> => {
     const salt = await db.getVaultData('pbkdf2-salt');
@@ -69,131 +21,95 @@ export const isVaultInitialized = async (): Promise<boolean> => {
 };
 
 /**
- * Initializes the vault with a new master password, creating a salt and deriving the first session key.
+ * Initializes the vault with a new master password. This generates a new salt, stores it,
+ * and commands the Security Core worker to derive and cache a session key.
  * @param {string} masterPassword - The user's chosen master password.
  * @throws {Error} If the vault is already initialized.
- * @returns {Promise<void>}
- * @example
- * await initializeVault('my-secret-password-123');
+ * @returns {Promise<void>} A promise that resolves when the vault is successfully initialized and unlocked.
  */
 export const initializeVault = async (masterPassword: string): Promise<void> => {
     if (await isVaultInitialized()) {
         throw new Error("Vault is already initialized.");
     }
-    const salt = crypto.generateSalt();
+    const salt = await crypto.generateSalt();
     await db.saveVaultData('pbkdf2-salt', salt);
-    sessionKey = await crypto.deriveKey(masterPassword, salt);
-    resetSessionTimeout();
-    notifyStateChange(true);
+    // This command also serves to unlock the vault for the first time.
+    await crypto.deriveAndCacheKey(masterPassword, salt);
 };
 
 /**
- * Checks if the vault is currently unlocked (i.e., the session key is in memory).
- * @returns {boolean} True if the vault is unlocked, false otherwise.
- * @example
- * if (isUnlocked()) {
- *   // perform encrypted action
- * }
+ * Checks if the vault is currently unlocked by querying the Security Core worker.
+ * @returns {Promise<boolean>} A promise that resolves to true if the vault is unlocked, false otherwise.
  */
-export const isUnlocked = (): boolean => {
-    return sessionKey !== null;
+export const isUnlocked = async (): Promise<boolean> => {
+    return crypto.isUnlocked();
 };
 
 /**
- * Attempts to unlock the vault by deriving a session key from the provided master password.
- * On success, it starts the session timeout.
+ * Attempts to unlock the vault by sending the master password to the Security Core worker.
+ * The worker will derive a key and verify it against a stored "canary" value.
+ * On success, the worker caches the session key.
  * @param {string} masterPassword - The user's master password.
  * @throws {Error} If the vault is not initialized or if the password is incorrect.
- * @returns {Promise<void>}
- * @example
- * await unlockVault('my-secret-password-123');
+ * @returns {Promise<void>} A promise that resolves on successful unlock.
  */
 export const unlockVault = async (masterPassword: string): Promise<void> => {
     const salt = await db.getVaultData('pbkdf2-salt');
     if (!salt) {
         throw new Error("Vault not initialized.");
     }
-    try {
-        sessionKey = await crypto.deriveKey(masterPassword, salt);
-        resetSessionTimeout();
-        notifyStateChange(true);
-    } catch (e) {
-        console.error("Key derivation failed, likely incorrect password", e);
-        throw new Error("Invalid Master Password.");
-    }
+    // The worker handles the logic of deriving the key and verifying it.
+    // An error will be thrown by postMessageToWorker if derivation/caching fails (e.g., wrong password).
+    await crypto.deriveAndCacheKey(masterPassword, salt);
 };
 
 /**
- * Locks the vault by clearing the session key from memory and stopping the session timer.
- * @example
- * lockVault();
+ * Locks the vault by instructing the Security Core worker to securely wipe the session key from its memory.
+ * @returns {Promise<void>} A promise that resolves when the vault is locked.
  */
-export const lockVault = (): void => {
-    sessionKey = null;
-    if (sessionTimeoutId) {
-        clearTimeout(sessionTimeoutId);
-        sessionTimeoutId = null;
-    }
-    notifyStateChange(false);
+export const lockVault = async (): Promise<void> => {
+    await crypto.lock();
 };
 
 /**
- * Saves a plaintext credential to the vault, encrypting it with the current session key.
+ * Saves a plaintext credential to the vault by encrypting it via the Security Core worker.
  * @param {string} id - The unique identifier for the credential (e.g., 'github_pat').
  * @param {string} plaintext - The sensitive data to encrypt and save.
  * @throws {Error} If the vault is locked.
- * @returns {Promise<void>}
- * @example
- * await saveCredential('github_pat', 'ghp_...');
+ * @returns {Promise<void>} A promise that resolves when the credential is saved.
  */
 export const saveCredential = async (id: string, plaintext: string): Promise<void> => {
-    if (!sessionKey) {
+    if (!(await isUnlocked())) {
         throw new Error("Vault is locked. Cannot save credential.");
     }
-    const { ciphertext, iv } = await crypto.encrypt(plaintext, sessionKey);
-    const encryptedData: EncryptedData = {
-        id,
-        ciphertext,
-        iv
-    };
+    const { ciphertext, iv } = await crypto.encrypt(plaintext);
+    const encryptedData: EncryptedData = { id, ciphertext, iv };
     await db.saveEncryptedToken(encryptedData);
-    resetSessionTimeout();
 };
 
 /**
- * Retrieves and decrypts a credential from the vault.
+ * Retrieves and decrypts a credential from the vault via the Security Core worker.
  * @param {string} id - The unique identifier of the credential to retrieve.
  * @throws {Error} If the vault is locked or if decryption fails.
  * @returns {Promise<string | null>} A promise that resolves to the decrypted plaintext, or null if not found.
- * @example
- * const token = await getDecryptedCredential('github_pat');
  */
 export const getDecryptedCredential = async (id: string): Promise<string | null> => {
-    if (!sessionKey) {
-        // This error is intentional. The UI layer should use the vault state
-        // to prevent calling this function when the vault is locked.
+    if (!(await isUnlocked())) {
         throw new Error("Vault is locked. Cannot retrieve credential.");
     }
     const encryptedData = await db.getEncryptedToken(id);
     if (!encryptedData) {
         return null;
     }
-    try {
-        const plaintext = await crypto.decrypt(encryptedData.ciphertext, sessionKey, encryptedData.iv);
-        resetSessionTimeout(); // Successful decryption is considered activity.
-        return plaintext;
-    } catch (e) {
-        console.error(`Decryption failed for credential '${id}'. The vault will be locked as a security precaution.`, e);
-        lockVault(); // Relock on decryption failure.
-        throw new Error("Decryption failed. This may be due to data corruption or an invalid key. The vault has been locked.");
-    }
+    // The worker will throw if decryption fails, and it will auto-lock itself.
+    // We just need to let the error propagate up.
+    const { ciphertext, iv } = encryptedData;
+    return crypto.decrypt({ ciphertext, iv });
 };
 
 /**
  * Lists the IDs of all credentials stored in the vault.
  * @returns {Promise<string[]>} A promise that resolves to an array of credential IDs.
- * @example
- * const credentialIds = await listCredentials();
  */
 export const listCredentials = async (): Promise<string[]> => {
     return db.getAllEncryptedTokenIds();
@@ -203,10 +119,8 @@ export const listCredentials = async (): Promise<string[]> => {
  * Completely erases all vault data from the database and locks the service.
  * This is a destructive action.
  * @returns {Promise<void>}
- * @example
- * await resetVault();
  */
 export const resetVault = async (): Promise<void> => {
     await db.clearAllData();
-    lockVault();
-}
+    await lockVault();
+};
