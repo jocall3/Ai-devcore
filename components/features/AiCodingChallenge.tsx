@@ -1,11 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { generateCodingChallengeStream } from '../../services/index.ts';
-import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
-import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
-import { useNotification } from '../../contexts/NotificationContext.tsx';
-import { BeakerIcon } from '../icons.tsx';
-import { LoadingSpinner } from '../shared/index.tsx';
-import { MarkdownRenderer } from '../shared/index.tsx';
+import { generateCodingChallengeStream } from '@/services/index.ts';
+import { useGlobalState } from '@/contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '@/contexts/VaultModalContext.tsx';
+import { useNotification } from '@/contexts/NotificationContext.tsx';
+import { BeakerIcon } from '@/components/icons.tsx';
+import { LoadingSpinner, MarkdownRenderer } from '@/components/shared/index.tsx';
 
 /**
  * @component AiCodingChallenge

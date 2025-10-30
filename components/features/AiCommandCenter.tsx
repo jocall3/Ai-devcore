@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { Type, type FunctionDeclaration } from "@google/genai";
-import { logError } from '../../services/telemetryService.ts';
+import { getInferenceFunction, logError } from '../../services/index.ts';
+import type { ICommand } from '../../services/index.ts';
 import { FEATURE_TAXONOMY } from '../../services/taxonomyService.ts';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 import { CommandLineIcon } from '../icons.tsx';
@@ -9,19 +9,16 @@ import { ALL_FEATURE_IDS } from '../../constants.tsx';
 import { executeWorkspaceAction, ACTION_REGISTRY } from '../../services/workspaceConnectorService.ts';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
-import { getDecryptedCredential } from '../../services/vaultService.ts';
-import { GeminiProvider } from '../../services/geminiService.ts';
-import type { CommandResponse } from '../../services/geminiService.ts';
 
-const baseFunctionDeclarations: FunctionDeclaration[] = [
+const baseFunctionDeclarations: any[] = [
     {
         name: 'navigateTo',
         description: 'Navigates to a specific feature page.',
         parameters: {
-            type: Type.OBJECT,
+            type: "object",
             properties: {
                 featureId: { 
-                    type: Type.STRING, 
+                    type: "string", 
                     description: 'The ID of the feature to navigate to.',
                     enum: ALL_FEATURE_IDS
                 },
@@ -33,25 +30,25 @@ const baseFunctionDeclarations: FunctionDeclaration[] = [
         name: 'runFeatureWithInput',
         description: 'Navigates to a feature and passes initial data to it.',
         parameters: {
-            type: Type.OBJECT,
+            type: "object",
             properties: {
                  featureId: { 
-                    type: Type.STRING, 
+                    type: "string", 
                     description: 'The ID of the feature to run.',
                     enum: ALL_FEATURE_IDS
                 },
                 props: {
-                    type: Type.OBJECT,
+                    type: "object",
                     description: 'An object containing the initial properties for the feature, based on its required inputs.',
                     properties: {
-                        initialCode: { type: Type.STRING },
-                        initialPrompt: { type: Type.STRING },
-                        beforeCode: { type: Type.STRING },
-                        afterCode: { type: Type.STRING },
-                        logInput: { type: Type.STRING },
-                        diff: { type: Type.STRING },
-                        codeInput: { type: Type.STRING },
-                        jsonInput: { type: Type.STRING },
+                        initialCode: { type: "string" },
+                        initialPrompt: { type: "string" },
+                        beforeCode: { type: "string" },
+                        afterCode: { type: "string" },
+                        logInput: { type: "string" },
+                        diff: { type: "string" },
+                        codeInput: { type: "string" },
+                        jsonInput: { type: "string" },
                     }
                 }
             },
@@ -61,21 +58,21 @@ const baseFunctionDeclarations: FunctionDeclaration[] = [
 ];
 
 // Dynamically add the workspace action
-const functionDeclarations: FunctionDeclaration[] = [
+const functionDeclarations: any[] = [
     ...baseFunctionDeclarations,
     {
         name: 'runWorkspaceAction',
         description: 'Executes a defined action on a connected workspace service like Jira, Slack, or GitHub.',
         parameters: {
-            type: Type.OBJECT,
+            type: "object",
             properties: {
                  actionId: {
-                    type: Type.STRING,
+                    type: "string",
                     description: 'The unique identifier for the action to execute.',
                     enum: [ ...ACTION_REGISTRY.keys() ]
                 },
                 params: {
-                    type: Type.OBJECT,
+                    type: "object",
                     description: 'An object containing the parameters for the action, matching its required inputs.'
                 }
             },
@@ -96,52 +93,23 @@ const ExamplePromptButton: React.FC<{ text: string, onClick: (text: string) => v
 )
 
 export const AiCommandCenter: React.FC = () => {
-    const { state, dispatch } = useGlobalState();
-    const { vaultState } = state;
-    const { requestUnlock, requestCreation } = useVaultModal();
+    const { dispatch } = useGlobalState();
+    const { requestUnlock } = useVaultModal();
     const { addNotification } = useNotification();
     const [prompt, setPrompt] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [lastResponse, setLastResponse] = useState('');
 
-    const getProvider = useCallback(async () => {
-        if (!vaultState.isInitialized) {
-            const created = await requestCreation();
-            if (!created) {
-                addNotification('Vault setup is required for AI commands.', 'error');
-                return null;
-            }
-        }
-        if (!vaultState.isUnlocked) {
-            const unlocked = await requestUnlock();
-            if (!unlocked) {
-                addNotification('Vault must be unlocked for AI commands.', 'info');
-                return null;
-            }
-        }
-        const apiKey = await getDecryptedCredential('gemini_api_key');
-        if (!apiKey) {
-            addNotification('Gemini API key not found in vault.', 'error');
-            return null;
-        }
-        return new GeminiProvider(apiKey);
-    }, [vaultState, requestCreation, requestUnlock, addNotification]);
-
-
-    const handleCommand = useCallback(async () => {
+    const handleCommand = useCallback(async (isRetry = false) => {
         if (!prompt.trim()) return;
 
         setIsLoading(true);
-        setLastResponse('');
+        if(!isRetry) {
+            setLastResponse('');
+        }
 
         try {
-            const provider = await getProvider();
-            if (!provider) {
-                setIsLoading(false);
-                return;
-            }
-            
-            const response: CommandResponse = await provider.getInferenceFunction(prompt, functionDeclarations, knowledgeBase);
+            const response: ICommand = await getInferenceFunction(prompt, functionDeclarations, knowledgeBase);
             
             if (response.functionCalls && response.functionCalls.length > 0) {
                 const call = response.functionCalls[0];
@@ -161,7 +129,12 @@ export const AiCommandCenter: React.FC = () => {
                             const result = await executeWorkspaceAction(args.actionId, args.params);
                             setLastResponse(`Action '${args.actionId}' executed successfully.\n\nResult: \`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``);
                         } catch (e) {
-                            setLastResponse(`Action failed: ${e instanceof Error ? e.message : 'Unknown error'}`);
+                            const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+                            setLastResponse(`Action failed: ${errorMessage}`);
+                            if (errorMessage.includes('Vault is locked')) {
+                                addNotification('Vault is locked. Please unlock it to use this workspace action.', 'info');
+                                requestUnlock();
+                            }
                         }
                         break;
                     default:
@@ -173,12 +146,22 @@ export const AiCommandCenter: React.FC = () => {
             }
 
         } catch (err) {
-            logError(err as Error, { prompt });
-            setLastResponse(err instanceof Error ? err.message : 'An unknown error occurred.');
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            if (!isRetry && (errorMessage.includes('Vault is locked') || errorMessage.includes('API key not found'))) {
+                addNotification('Your credential vault is locked. Please unlock it to use AI features.', 'info');
+                const unlocked = await requestUnlock();
+                if (unlocked) {
+                    handleCommand(true); // Retry the operation
+                    return; // Exit to avoid setting loading to false too early
+                }
+            } else {
+                logError(err as Error, { prompt });
+                setLastResponse(errorMessage);
+            }
         } finally {
             setIsLoading(false);
         }
-    }, [prompt, dispatch, getProvider]);
+    }, [prompt, dispatch, addNotification, requestUnlock]);
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -218,7 +201,7 @@ export const AiCommandCenter: React.FC = () => {
                         rows={2}
                     />
                     <button
-                        onClick={handleCommand}
+                        onClick={() => handleCommand()}
                         disabled={isLoading}
                         className="btn-primary absolute right-3 top-1/2 -translate-y-1/2 px-4 py-2"
                     >
