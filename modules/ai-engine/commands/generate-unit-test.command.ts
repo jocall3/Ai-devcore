@@ -4,8 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// FIX: Corrected import path for AIEngineService.
-import type { AIEngineService } from '../ai-engine.service';
+// FIX: AIEngineService interface is defined locally to resolve a broken import path
+// and compilation errors, as the external module 'ai-engine.service' currently does
+// not export 'AIEngineService'. This is a temporary measure to allow this file to compile.
+// In a fully refactored system, this interface would be properly imported from '../ai-engine.service'.
+interface AIEngineService {
+  /**
+   * Generates unit tests for a given code snippet, returning them as an asynchronous stream.
+   * @param code The source code snippet for which to generate tests.
+   * @returns An asynchronous generator yielding chunks of generated unit test code.
+   */
+  generateUnitTestsStream(code: string): Promise<AsyncGenerator<string>>;
+}
 
 // FIX: ICommand is defined locally to resolve a broken import path.
 // In a fully refactored system, this would be a central, shared interface.
