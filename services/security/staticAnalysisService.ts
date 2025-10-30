@@ -1,7 +1,7 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 
 export interface SecurityIssue {
     line: number;
@@ -43,6 +43,8 @@ export const runStaticScan = (code: string): SecurityIssue[] => {
 
     lines.forEach((line, index) => {
         rules.forEach(rule => {
+            // Reset regex state for global flag before testing to avoid issues with subsequent matches.
+            rule.regex.lastIndex = 0;
             if (rule.regex.test(line)) {
                 issues.push({
                     line: index + 1,
