@@ -1,4 +1,4 @@
-import crypto from './cryptoService.ts';
+import * as crypto from './cryptoService.ts';
 import * as db from './dbService.ts';
 import type { EncryptedData } from '../types.ts';
 
