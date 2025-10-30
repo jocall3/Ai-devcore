@@ -1,4 +1,4 @@
-import * as crypto from './cryptoService.ts';
+import crypto from './cryptoService.ts'; // Changed import from `* as crypto` to `default import`
 import * as db from './dbService.ts';
 import type { EncryptedData } from '../types.ts';
 
@@ -94,7 +94,8 @@ export const getDecryptedCredential = async (id: string): Promise<string | null>
     }
     // The worker will throw if decryption fails, and it will auto-lock itself.
     // We just need to let the error propagate up.
-    return crypto.decrypt(encryptedData);
+    const decryptedResult = await crypto.decrypt(encryptedData);
+    return decryptedResult.plaintext; // Extract the plaintext property from the returned object
 };
 
 /**
