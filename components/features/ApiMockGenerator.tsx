@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { generateMockData } from '../../services/aiService.ts';
+import React, { useState, useEffect, useCallback } from 'react';
+import { generateMockData } from '../../services/index.ts';
 import { startMockServer, stopMockServer, setMockRoutes, isMockServerRunning } from '../../services/mocking/mockServer.ts';
-import { saveMockCollection, getAllMockCollections, deleteMockCollection } from '../../services/mocking/db.ts';
-import { ServerStackIcon, SparklesIcon, PlusIcon, TrashIcon } from '../icons.tsx';
+import { saveMockCollection, getAllMockCollections } from '../../services/mocking/db.ts';
+import { ServerStackIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 
 const exampleSchema = "a user with an id, name, email, and a nested address object containing a city and country";
@@ -16,7 +16,7 @@ export const ApiMockGenerator: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const [isServerRunning, setIsServerRunning] = useState(isMockServerRunning());
-    const [routes, setRoutes] = useState([{ path: '/api/users', method: 'GET' }]);
+    const [routes] = useState([{ path: '/api/users', method: 'GET' }]);
 
     useEffect(() => {
         const loadCollections = async () => {
@@ -46,6 +46,21 @@ export const ApiMockGenerator: React.FC = () => {
         }
     };
 
+    const updateRoutes = useCallback(() => {
+        const mockRoutes = routes.map(route => {
+            // A simple implementation: find first matching collection for path
+            const matchingCollection = collections.find(c => route.path.includes(c.id));
+            return {
+                ...route,
+                response: {
+                    status: 200,
+                    body: matchingCollection ? matchingCollection.data : { message: 'No data found for this route.' }
+                }
+            };
+        });
+        setMockRoutes(mockRoutes as any);
+    }, [routes, collections]);
+
     const handleServerToggle = async () => {
         if (isServerRunning) {
             await stopMockServer();
@@ -61,26 +76,11 @@ export const ApiMockGenerator: React.FC = () => {
         }
     };
 
-    const updateRoutes = () => {
-        const mockRoutes = routes.map(route => {
-            // A simple implementation: find first matching collection for path
-            const matchingCollection = collections.find(c => route.path.includes(c.id));
-            return {
-                ...route,
-                response: {
-                    status: 200,
-                    body: matchingCollection ? matchingCollection.data : { message: 'No data found for this route.' }
-                }
-            };
-        });
-        setMockRoutes(mockRoutes as any);
-    };
-
     useEffect(() => {
         if (isServerRunning) {
             updateRoutes();
         }
-    }, [routes, collections, isServerRunning]);
+    }, [isServerRunning, updateRoutes]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
@@ -89,7 +89,7 @@ export const ApiMockGenerator: React.FC = () => {
                     <h1 className="text-3xl font-bold flex items-center"><ServerStackIcon /><span className="ml-3">AI API Mock Server</span></h1>
                     <p className="text-text-secondary mt-1">Generate and serve mock API data locally using a service worker.</p>
                 </div>
-                <button onClick={handleServerToggle} className={`px-4 py-2 rounded-md font-semibold flex items-center gap-2 ${isServerRunning ? 'bg-green-100 text-green-700' : 'bg-gray-100'}`}>
+                <button onClick={handleServerToggle} className={`px-4 py-2 rounded-md font-semibold flex items-center gap-2 ${isServerRunning ? 'bg-green-100 text-green-700' : 'bg-gray-100 dark:bg-slate-700'}`}>
                     <span className={`w-3 h-3 rounded-full ${isServerRunning ? 'bg-green-500' : 'bg-gray-400'}`}></span>
                     {isServerRunning ? 'Server Running' : 'Server Stopped'}
                 </button>
@@ -120,7 +120,7 @@ export const ApiMockGenerator: React.FC = () => {
                             </div>
                             <div className="overflow-y-auto">
                                 <h4 className="font-semibold text-sm mb-1">Mock Routes</h4>
-                                {routes.map((r, i) => <div key={i} className="flex gap-1 items-center mb-1"><select value={r.method} className="p-1 text-xs bg-background border rounded"><option>GET</option><option>POST</option></select><input type="text" value={r.path} className="flex-grow p-1 text-xs bg-background border rounded" /></div>)}
+                                {routes.map((r, i) => <div key={i} className="flex gap-1 items-center mb-1"><select defaultValue={r.method} className="p-1 text-xs bg-background border rounded"><option>GET</option><option>POST</option></select><input type="text" defaultValue={r.path} className="flex-grow p-1 text-xs bg-background border rounded" /></div>)}
                                  <p className="text-xs text-text-secondary mt-2">Routes are automatically mapped to collections by name (e.g., `/api/users` maps to `users` collection).</p>
                             </div>
                         </div>

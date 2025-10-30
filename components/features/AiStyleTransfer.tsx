@@ -3,6 +3,9 @@ import { transferCodeStyleStream } from '../../services/index.ts';
 import { SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { MarkdownRenderer } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const exampleCode = `function my_func(x,y){return x+y;}`;
 const exampleStyleGuide = `- Use camelCase for function names.
@@ -16,28 +19,55 @@ export const AiStyleTransfer: React.FC = () => {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
 
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
+    const withVault = useCallback(async (callback: () => Promise<void>) => {
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (!created) {
+                addNotification('Vault setup is required to use AI features.', 'error');
+                return;
+            }
+        }
+        if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (!unlocked) {
+                addNotification('Vault must be unlocked to use AI features.', 'info');
+                return;
+            }
+        }
+        await callback();
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
+
     const handleGenerate = useCallback(async () => {
         if (!inputCode.trim() || !styleGuide.trim()) {
             setError('Please provide both code and a style guide.');
             return;
         }
-        setIsLoading(true);
-        setError('');
-        setOutputCode('');
-        try {
-            const stream = transferCodeStyleStream({ code: inputCode, styleGuide });
-            let fullResponse = '';
-            for await (const chunk of stream) {
-                fullResponse += chunk;
-                setOutputCode(fullResponse);
+        
+        await withVault(async () => {
+            setIsLoading(true);
+            setError('');
+            setOutputCode('');
+            try {
+                const stream = transferCodeStyleStream({ code: inputCode, styleGuide });
+                let fullResponse = '';
+                for await (const chunk of stream) {
+                    fullResponse += chunk;
+                    setOutputCode(fullResponse);
+                }
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+                setError(`Failed to transfer style: ${errorMessage}`);
+                addNotification(errorMessage, 'error');
+            } finally {
+                setIsLoading(false);
             }
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            setError(`Failed to transfer style: ${errorMessage}`);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [inputCode, styleGuide]);
+        });
+    }, [inputCode, styleGuide, withVault, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">

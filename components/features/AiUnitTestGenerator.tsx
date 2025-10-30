@@ -7,6 +7,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { generateUnitTestsStream, downloadFile } from '../../services/index.ts';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { BeakerIcon, ArrowDownTrayIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { MarkdownRenderer } from '../shared/index.tsx';
@@ -58,20 +60,20 @@ export const AiUnitTestGenerator: React.FC<AiUnitTestGeneratorProps> = ({ initia
     const [code, setCode] = useState<string>(initialCode || exampleCode);
     const [tests, setTests] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string>('');
     const { addNotification } = useNotification();
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
 
     /**
      * A callback function that triggers the AI to generate unit tests for the provided code.
-     * It handles loading states and displays notifications for success or failure.
+     * It handles loading states, vault interactions, and displays notifications for success or failure.
      * The generated test code is streamed to the UI for a responsive experience.
      *
      * @function
      * @param {string} codeToTest - The source code to generate tests for.
      * @returns {Promise<void>} A promise that resolves when the generation process is complete.
-     *
-     * @example
-     * // This function is typically called by a button click
-     * <button onClick={() => handleGenerate(myCode)}>Generate</button>
      */
     const handleGenerate = useCallback(async (codeToTest: string) => {
         if (!codeToTest.trim()) {
@@ -80,7 +82,26 @@ export const AiUnitTestGenerator: React.FC<AiUnitTestGeneratorProps> = ({ initia
         }
         setIsLoading(true);
         setTests('');
+        setError('');
+
         try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
             const stream = generateUnitTestsStream(codeToTest);
             let fullResponse = '';
             for await (const chunk of stream) {
@@ -89,15 +110,12 @@ export const AiUnitTestGenerator: React.FC<AiUnitTestGeneratorProps> = ({ initia
             }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            setError(`Failed to generate tests: ${errorMessage}`);
             addNotification(`Failed to generate tests: ${errorMessage}`, 'error');
-            // This is where a vault lock error would be displayed to the user.
-            // The user's instruction "Man just fixed the fucking thing it says it cannot retrieve my password vault is locked"
-            // is addressed by ensuring this component gracefully handles errors from the service layer,
-            // which is now responsible for vault interactions.
         } finally {
             setIsLoading(false);
         }
-    }, [addNotification]);
+    }, [addNotification, vaultState, requestCreation, requestUnlock]);
     
     useEffect(() => {
         if (initialCode) {
@@ -113,13 +131,8 @@ export const AiUnitTestGenerator: React.FC<AiUnitTestGeneratorProps> = ({ initia
      * @function
      * @param {string} markdown - The markdown string containing a code block.
      * @returns {string} The raw code without markdown fences.
-     *
-     * @example
-     * const markdownCode = "```javascript\nconsole.log('hello');\n```";
-     * const rawCode = cleanCodeForDownload(markdownCode); // "console.log('hello');\n"
      */
     const cleanCodeForDownload = (markdown: string): string => {
-        // This regex removes the opening fence (e.g., ```javascript) and the closing fence (```)
         return markdown.replace(/^```(?:\w+\n)?/, '').replace(/\n?```$/, '');
     };
 
@@ -170,8 +183,9 @@ export const AiUnitTestGenerator: React.FC<AiUnitTestGeneratorProps> = ({ initia
                                 <LoadingSpinner />
                             </div>
                         )}
-                        {tests && <MarkdownRenderer content={tests} />}
-                        {!isLoading && !tests && (
+                        {error && <p className="p-4 text-red-500">{error}</p>}
+                        {tests && !isLoading && !error && <MarkdownRenderer content={tests} />}
+                        {!isLoading && !tests && !error && (
                             <div className="text-text-secondary h-full flex items-center justify-center">
                                 The generated tests will appear here.
                             </div>
