@@ -3,11 +3,11 @@
  * @license SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenerativeAI, GenerativeModel, GenerateContentRequest, Part, Tool, FunctionDeclarationsTool } from "@google/generative-ai";
+import { GoogleGenerativeAI, GenerateContentRequest, Tool, FunctionDeclarationsTool, GenerateContentStreamResult, FunctionCall } from "@google/genai";
 import { inject, injectable } from "inversify";
 import "reflect-metadata";
-import { SecurityCoreServiceConnector } from "../../security-core/connectors/security-core.service-connector";
-import { SERVICE_IDENTIFIER } from "../../../inversify.identifiers";
+import { SecurityCoreService } from '../../security-core/security-core.service';
+import { SERVICE_IDENTIFIER } from '../../service.registry';
 import { logError } from "../../../services/telemetryService";
 
 // --- Interfaces and Types --- 
@@ -72,14 +72,14 @@ export interface IAiProvider {
 export class GeminiProvider implements IAiProvider {
     private ai: GoogleGenerativeAI | null = null;
     private lastUsedApiKey: string | null = null;
-    private readonly securityCore: SecurityCoreServiceConnector;
+    private readonly securityCore: SecurityCoreService;
 
     /**
      * @constructor
-     * @param {SecurityCoreServiceConnector} securityCore - A connector to the Security Core for securely retrieving API keys. This is injected via a DI container.
+     * @param {SecurityCoreService} securityCore - A connector to the Security Core for securely retrieving API keys. This is injected via a DI container.
      */
     public constructor(
-        @inject(SERVICE_IDENTIFIER.SecurityCoreServiceConnector) securityCore: SecurityCoreServiceConnector
+        @inject(SERVICE_IDENTIFIER.SecurityCore) securityCore: SecurityCoreService
     ) {
         this.securityCore = securityCore;
     }
@@ -205,7 +205,7 @@ export class GeminiProvider implements IAiProvider {
 
             const response = result.response;
             const text = response.text() || null;
-            const functionCalls = response.functionCalls()?.map(call => ({ name: call.name, args: call.args })) || null;
+            const functionCalls = response.functionCalls()?.map((call: FunctionCall) => ({ name: call.name, args: call.args })) || null;
 
             return { text, functionCalls };
         } catch (error) {
@@ -222,7 +222,7 @@ export class GeminiProvider implements IAiProvider {
      * const imageUrl = await geminiProvider.generateImage(prompt);
      * ```
      */
-    public async generateImage(prompt: string): Promise<string> {
+    public async generateImage(_prompt: string): Promise<string> {
       console.warn("Image generation with Gemini is not yet implemented via the standard provider interface.");
       // This would require a different model and API endpoint call structure.
       // For now, returning a placeholder.
