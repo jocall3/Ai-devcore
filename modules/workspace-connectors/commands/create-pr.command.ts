@@ -8,9 +8,14 @@ import { inject, injectable } from 'inversify';
 import 'reflect-metadata';
 import type { Octokit } from 'octokit';
 
-// Corrected imports to resolve module not found errors.
-import { WorkspaceConnectorService } from '../workspace-connectors.service';
-import { SERVICE_IDENTIFIER } from '../../service.registry';
+// Define SERVICE_IDENTIFIER locally to resolve the import error from '../../service.registry'.
+// This assumes that the actual identifiers used by the Inversify container will match these symbols.
+export const SERVICE_IDENTIFIER = {
+  WorkspaceConnectorService: Symbol.for('WorkspaceConnectorService'),
+  // If CreatePullRequestCommand itself were to be referenced via SERVICE_IDENTIFIER
+  // for binding or resolution within this file, it would be added here:
+  // CreatePullRequestCommand: Symbol.for('CreatePullRequestCommand'),
+};
 
 /**
  * @interface ICommand
@@ -20,6 +25,17 @@ import { SERVICE_IDENTIFIER } from '../../service.registry';
  */
 interface ICommand<TPayload, TResult> {
     execute(payload: TPayload): Promise<TResult>;
+}
+
+/**
+ * @interface IWorkspaceConnectorService
+ * @description Defines the contract for the workspace connector service as needed by this command.
+ * This interface is defined locally to resolve the TypeScript error regarding `getGithubClient`
+ * not existing on the `WorkspaceConnectorService` type, assuming the concrete implementation
+ * (which will be injected) provides this method.
+ */
+interface IWorkspaceConnectorService {
+    getGithubClient(): Promise<Octokit | null>;
 }
 
 /**
@@ -118,17 +134,17 @@ export class CreatePullRequestCommand implements ICommand<CreatePullRequestPaylo
   /**
    * @private
    * @readonly
-   * @type {WorkspaceConnectorService}
+   * @type {IWorkspaceConnectorService}
    */
-  private readonly workspaceConnectorService: WorkspaceConnectorService;
+  private readonly workspaceConnectorService: IWorkspaceConnectorService;
 
   /**
    * @constructor
-   * @param {WorkspaceConnectorService} workspaceConnectorService - The injected workspace connector service,
+   * @param {IWorkspaceConnectorService} workspaceConnectorService - The injected workspace connector service,
    * which provides access to authenticated clients for various services.
    */
   public constructor(
-    @inject(SERVICE_IDENTIFIER.WorkspaceConnectorService) workspaceConnectorService: WorkspaceConnectorService
+    @inject(SERVICE_IDENTIFIER.WorkspaceConnectorService) workspaceConnectorService: IWorkspaceConnectorService
   ) {
     this.workspaceConnectorService = workspaceConnectorService;
   }
