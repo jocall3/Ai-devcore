@@ -1,9 +1,12 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import type { GeneratedFile } from '../../types.ts';
-import { generateFeature, generateFullStackFeature, generateUnitTestsStream, generateCommitMessageStream, generateDockerfile } from '../../services/index.ts';
+import { generateFeature, generateFullStackFeature, generateUnitTestsStream, generateCommitMessageStream, generateDockerfile } from '../../services/aiService.ts';
 import { saveFile, getAllFiles, clearAllFiles } from '../../services/dbService.ts';
 import { CpuChipIcon, DocumentTextIcon, BeakerIcon, GitBranchIcon, CloudIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 type SupplementalTab = 'TESTS' | 'COMMIT' | 'DEPLOYMENT' | 'CODE';
 type OutputTab = GeneratedFile | SupplementalTab;
@@ -22,6 +25,11 @@ export const AiFeatureBuilder: React.FC = () => {
     const [activeTab, setActiveTab] = useState<OutputTab>('CODE');
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
+
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
     
     useEffect(() => {
         const loadFiles = async () => {
@@ -40,6 +48,23 @@ export const AiFeatureBuilder: React.FC = () => {
         setGeneratedFiles([]); setUnitTests(''); setCommitMessage(''); setDockerfile(''); setActiveTab('CODE');
 
         try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required for AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked for AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
             const resultFiles = includeBackend
                 ? await generateFullStackFeature(prompt, framework, styling)
                 : await generateFeature(prompt, framework, styling);
@@ -64,11 +89,13 @@ export const AiFeatureBuilder: React.FC = () => {
                 }
             }
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to generate feature.');
+            const errorMessage = err instanceof Error ? err.message : 'Failed to generate feature.';
+            setError(errorMessage);
+            addNotification(errorMessage, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [prompt, framework, styling, includeBackend]);
+    }, [prompt, framework, styling, includeBackend, vaultState, requestCreation, requestUnlock, addNotification]);
     
     const renderContent = () => {
         if (typeof activeTab === 'string') {

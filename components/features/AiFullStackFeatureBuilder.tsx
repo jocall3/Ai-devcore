@@ -1,10 +1,24 @@
 import React, { useState, useCallback } from 'react';
 import JSZip from 'jszip';
 import type { GeneratedFile } from '../../types.ts';
-import { generateFullStackFeature } from '../../services/index.ts';
+import { streamContent } from '../../services/index.ts';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { ServerStackIcon, SparklesIcon, DocumentTextIcon, ArrowDownTrayIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+
+const jsonFromStream = async (stream: AsyncGenerator<string, void, unknown>): Promise<GeneratedFile[]> => {
+    let fullResponse = '';
+    for await (const chunk of stream) { fullResponse += chunk; }
+    const jsonMatch = fullResponse.match(/```json\n?([\s\S]*?)\n?```/);
+    try {
+      return JSON.parse(jsonMatch ? jsonMatch[1] : fullResponse);
+    } catch (e) {
+      console.error('Failed to parse JSON from stream', e, { fullResponse });
+      throw new Error('Invalid JSON response from AI');
+    }
+};
 
 export const AiFullStackFeatureBuilder: React.FC = () => {
     const [prompt, setPrompt] = useState<string>('A simple guestbook where users can submit messages and see a list of them.');
@@ -13,6 +27,27 @@ export const AiFullStackFeatureBuilder: React.FC = () => {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
     const { addNotification } = useNotification();
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+
+    const withVault = useCallback(async (callback: () => Promise<void>) => {
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (!created) { 
+                addNotification('Vault setup is required to use AI features.', 'error');
+                throw new Error('Vault setup cancelled.');
+            } 
+        }
+        if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (!unlocked) { 
+                addNotification('Vault must be unlocked to use AI features.', 'error');
+                throw new Error('Vault unlock cancelled.');
+            }
+        }
+        await callback();
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
     const handleGenerate = useCallback(async () => {
         if (!prompt.trim()) { setError('Please enter a feature description.'); return; }
@@ -22,22 +57,29 @@ export const AiFullStackFeatureBuilder: React.FC = () => {
         setActiveTab(null);
 
         try {
-            const resultFiles = await generateFullStackFeature(prompt, 'React', 'Tailwind CSS');
-            
-            setGeneratedFiles(resultFiles);
-            if (resultFiles.length > 0) {
-                // Find the main component file to show first
-                const componentFile = resultFiles.find((f: GeneratedFile) => f.filePath.endsWith('Component.tsx'));
-                setActiveTab(componentFile || resultFiles[0]);
-            }
-            addNotification('Full-stack feature generated!', 'success');
+            await withVault(async () => {
+                const framework = 'React';
+                const styling = 'Tailwind CSS';
+                const stream = streamContent(`Generate a new full-stack feature. The frontend is ${framework} with ${styling}. The backend is a single Google Cloud Function with Firestore. The feature is: "${prompt}". Respond with an array of file objects, each with filePath and content.`, 'You are a full-stack software engineer specializing in GCP. You must respond with a JSON array of file objects.');
+                const resultFiles = await jsonFromStream(stream);
+
+                setGeneratedFiles(resultFiles);
+                if (resultFiles.length > 0) {
+                    const componentFile = resultFiles.find((f: GeneratedFile) => f.filePath.endsWith('Component.tsx'));
+                    setActiveTab(componentFile || resultFiles[0]);
+                }
+                addNotification('Full-stack feature generated!', 'success');
+            });
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to generate feature.');
-            addNotification('Failed to generate feature', 'error');
+            const msg = err instanceof Error ? err.message : 'Failed to generate feature.';
+            if (!msg.includes('cancelled')) { // Do not show notification if user cancelled vault action
+                setError(msg);
+                addNotification(msg, 'error');
+            }
         } finally {
             setIsLoading(false);
         }
-    }, [prompt, addNotification]);
+    }, [prompt, addNotification, withVault]);
     
     const handleDownloadZip = () => {
         if (generatedFiles.length === 0) return;
