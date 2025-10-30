@@ -1,4 +1,4 @@
-```typescript
+
 import React, { useState } from 'react';
 import { ICommand } from '../../core/command-bus/command-bus.service.ts'; // Corrected import path for ICommand
 import { IAiProvider } from '../../modules/ai-engine/providers/i-ai-provider.ts'; // Assuming IAiProvider is now here
@@ -82,4 +82,3 @@ export const CiCdPipelineGenerator: React.FC = () => {
         </div>
     );
 };
-```
