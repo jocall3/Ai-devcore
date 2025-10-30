@@ -4,10 +4,10 @@
  */
 
 import React, { Suspense, useRef, useEffect } from 'react';
-import type { Feature } from '../../types.ts';
-import { FEATURES_MAP } from '../features/index.tsx';
-import { LoadingIndicator } from '../../App.tsx';
-import { MinimizeIcon, MaximizeIcon, RestoreIcon, XMarkIcon } from '../icons.tsx';
+import type { Feature } from '@/types.ts';
+import { FEATURES_MAP } from '@/components/features/index.tsx';
+import { LoadingIndicator } from '@/App.tsx';
+import { MinimizeIcon, MaximizeIcon, RestoreIcon, XMarkIcon } from '@/components/icons.tsx';
 
 /**
  * @typedef {'normal' | 'maximized'} WindowDisplayState
