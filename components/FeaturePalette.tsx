@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ALL_FEATURES } from './features/index.ts';
+import { ALL_FEATURES } from './features/index.tsx';
 import type { Feature } from '../types.ts';
 
 const FeatureItem: React.FC<{ feature: Feature; onSelect: () => void; }> = ({ feature, onSelect }) => {
