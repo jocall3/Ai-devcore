@@ -1,4 +1,4 @@
-```typescript
+
 import React, { useState, useCallback } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { generateColorPalette } from '../../services/aiService.ts';
@@ -207,4 +207,3 @@ export const ColorPaletteGenerator: React.FC = () => {
         </div>
     );
 };
-```
