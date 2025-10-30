@@ -1,3 +1,4 @@
+```typescript
 /**
  * @file Defines the types, enums, and interfaces for communication with the Security Core Web Worker.
  * This file establishes the strict contract for the message-passing interface between the main thread
@@ -271,3 +272,13 @@ export interface EncryptedData {
    */
   iv: Uint8Array;
 }
+
+// Augment the AppEventMap interface from the event-bus.service module
+// to include the 'vault:state-changed' event. This resolves the TS2345 error
+// in security-core.service.ts by making the string literal a valid event key.
+declare module '../../core/bus/event-bus.service' {
+  interface AppEventMap {
+    'vault:state-changed': VaultStatusPayload;
+  }
+}
+```
