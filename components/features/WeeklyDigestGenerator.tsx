@@ -1,4 +1,3 @@
-```typescript
 import React, { useState, useCallback, useEffect } from 'react';
 import { sendEmail } from '../../services/index.ts';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
@@ -165,4 +164,3 @@ export const WeeklyDigestGenerator: React.FC = () => {
         </div>
     );
 };
-```
