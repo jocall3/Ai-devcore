@@ -1,8 +1,11 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { generateImage, generateImageFromImageAndText } from '../../services/aiService.ts';
+import { generateImage, generateImageFromImageAndText } from '../../services/index.ts';
 import { fileToBase64, blobToDataURL } from '../../services/fileUtils.ts';
 import { ImageGeneratorIcon, SparklesIcon, ArrowDownTrayIcon, XMarkIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const surprisePrompts = [
     'A majestic lion wearing a crown, painted in the style of Van Gogh.',
@@ -26,29 +29,56 @@ export const AiImageGenerator: React.FC = () => {
     const [error, setError] = useState<string>('');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    const { state } = useGlobalState();
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
+    const withVault = useCallback(async (callback: () => Promise<void>) => {
+        const { vaultState } = state;
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (!created) { 
+                addNotification('Vault setup is required to use AI features.', 'error');
+                return; 
+            }
+        }
+        if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (!unlocked) { 
+                addNotification('Vault must be unlocked to use AI features.', 'error');
+                return;
+            }
+        }
+        await callback();
+    }, [state, requestCreation, requestUnlock, addNotification]);
+
     const handleGenerate = useCallback(async () => {
         if (!prompt.trim()) {
             setError('Please enter a prompt to generate an image.');
             return;
         }
-        setIsLoading(true);
-        setError('');
-        setGeneratedImageUrl(null);
-        try {
-            let resultUrl: string;
-            if (uploadedImage) {
-                resultUrl = await generateImageFromImageAndText(prompt, uploadedImage.base64, uploadedImage.mimeType);
-            } else {
-                resultUrl = await generateImage(prompt);
+        
+        await withVault(async () => {
+            setIsLoading(true);
+            setError('');
+            setGeneratedImageUrl(null);
+            try {
+                let resultUrl: string;
+                if (uploadedImage) {
+                    resultUrl = await generateImageFromImageAndText(prompt, uploadedImage.base64, uploadedImage.mimeType);
+                } else {
+                    resultUrl = await generateImage(prompt);
+                }
+                setGeneratedImageUrl(resultUrl);
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+                setError(`Failed to generate image: ${errorMessage}`);
+                addNotification(`Error generating image: ${errorMessage}`, 'error');
+            } finally {
+                setIsLoading(false);
             }
-            setGeneratedImageUrl(resultUrl);
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            setError(`Failed to generate image: ${errorMessage}`);
-        } finally {
-            setIsLoading(false);
-        }
-    }, [prompt, uploadedImage]);
+        });
+    }, [prompt, uploadedImage, withVault, addNotification]);
 
     const handleSurpriseMe = () => {
         const randomPrompt = surprisePrompts[Math.floor(Math.random() * surprisePrompts.length)];
