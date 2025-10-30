@@ -34,10 +34,10 @@ container.bind<IEventBus>(TYPES.EventBus).to(EventBusService).inSingletonScope()
 // Binding the ICommandBus interface to the CommandHandler symbol to reconcile this.
 container.bind<ICommandBus>(TYPES.CommandHandler).to(CommandBusService).inSingletonScope();
 
-// Removed: container.bind<IAIEngineService>(TYPES.AIEngine).to(AIEngineService).inSingletonScope();
-// This line was removed because 'AIEngine' does not exist on the TYPES object, and 'IAIEngineService'
-// and 'AIEngineService' are reported as not exported from their module. Assuming the AI Engine service
-// cannot be bound in this registry under the current TYPES configuration.
+// The AI Engine service binding was previously commented out. Assuming IAIEngineService and AIEngineService
+// are now correctly exported from ai-engine.service.ts, and TYPES.AIEngine is defined.
+container.bind<IAIEngineService>(TYPES.AIEngine).to(AIEngineService).inSingletonScope();
+
 container.bind<IWorkspaceConnectorService>(TYPES.WorkspaceConnectorService).to(WorkspaceConnectorService).inSingletonScope();
 
 // IWindowingManager is not exported from its service, so we bind the concrete class.
