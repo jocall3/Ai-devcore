@@ -89,7 +89,7 @@ export const Window: React.FC<WindowProps> = ({ feature, state, onClose, onMinim
   const FeatureComponent = FEATURES_MAP.get(feature.id)?.component;
 
   const handleInteractionStart = (
-    e: React.MouseEvent<HTMLDivElement>,
+    e: React.MouseEvent<HTMLElement>,
     type: 'drag' | 'resize',
     direction?: string
   ) => {
