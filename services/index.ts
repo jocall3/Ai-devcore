@@ -31,8 +31,8 @@ export type { EncryptedData, GeneratedFile, StructuredPrSummary, StructuredExpla
 
 import { GeminiProvider, IAiProvider } from './geminiService.ts';
 import { getDecryptedCredential } from './vaultService.ts';
-import { GoogleGenAI, Type } from '@google/genai';
-import type { FunctionDeclaration } from '@google/genai';
+import { GoogleGenerativeAI, Part } from '@google/generative-ai'; // Corrected import for Google Generative AI client
+import type { FunctionDeclaration } from '@google/generative-ai'; // Corrected import for Google Generative AI client
 
 // Singleton provider instance logic to avoid re-initializing on every call
 let provider: IAiProvider | null = null;
@@ -51,8 +51,9 @@ function getProvider(): Promise<IAiProvider> {
             if (!apiKey) {
                 throw new Error("Vault is locked or Gemini API key is not configured.");
             }
-            const aiClient = new GoogleGenAI({ apiKey });
-            provider = new GeminiProvider(aiClient);
+            // GeminiProvider's constructor expects the API key string based on the error message.
+            // The GoogleGenerativeAI client is likely instantiated within the GeminiProvider.
+            provider = new GeminiProvider(apiKey);
             providerPromise = null; // Clear promise once resolved
             return provider;
         } catch (e) {
@@ -67,17 +68,20 @@ function getProvider(): Promise<IAiProvider> {
 
 export async function* streamContent(prompt: string | { parts: any[] }, systemInstruction: string, temperature = 0.5): AsyncGenerator<string> {
     const p = await getProvider();
-    yield* p.streamContent({ prompt, systemInstruction, temperature });
+    // streamContent expects separate arguments, not an object
+    yield* p.streamContent(prompt, systemInstruction, temperature);
 }
 
 export async function generateContent(prompt: string, systemInstruction: string, temperature = 0.5): Promise<string> {
     const p = await getProvider();
-    return p.generateContent({ prompt, systemInstruction, temperature });
+    // generateContent expects separate arguments, not an object
+    return p.generateContent(prompt, systemInstruction, temperature);
 }
 
 export async function generateJson<T>(prompt: any, systemInstruction: string, schema: any, temperature = 0.2): Promise<T> {
     const p = await getProvider();
-    return p.generateJson<T>({ prompt, systemInstruction, schema, temperature });
+    // generateJson expects separate arguments, not an object
+    return p.generateJson<T>(prompt, systemInstruction, schema, temperature);
 }
 
 export async function* generateCommitMessageStream(diff: string): AsyncGenerator<string> {
@@ -111,13 +115,13 @@ export async function* formatCodeStream(code: string): AsyncGenerator<string> {
 }
 
 export async function* generateComponentFromImageStream(base64Image: string): AsyncGenerator<string> {
-    const prompt = { parts: [{ text: "Generate a React component with Tailwind CSS based on this screenshot." }, { inlineData: { mimeType: 'image/png', data: base64Image } }] };
+    const prompt = { parts: [{ text: "Generate a React component with Tailwind CSS based on this screenshot." }, { inlineData: { mimeType: 'image/png', data: base64Image } as Part }] };
     const systemInstruction = `You are an expert React developer specializing in Tailwind CSS. Create a single-file component from the provided image. Respond with only the code in a markdown block.`;
     yield* streamContent(prompt, systemInstruction, 0.5);
 }
 
 export async function* transcribeAudioToCodeStream(base64Audio: string, mimeType: string): AsyncGenerator<string> {
-    const prompt = { parts: [{ text: "Transcribe the following audio into a code snippet. The user is dictating code." }, { inlineData: { mimeType, data: base64Audio } }] };
+    const prompt = { parts: [{ text: "Transcribe the following audio into a code snippet. The user is dictating code." }, { inlineData: { mimeType, data: base64Audio } as Part }] };
     const systemInstruction = `You are an expert at transcribing spoken code into text. Provide only the transcribed code in a markdown block.`;
     yield* streamContent(prompt, systemInstruction, 0.3);
 }
@@ -184,13 +188,15 @@ export async function* convertJsonToXbrlStream(json: string): AsyncGenerator<str
 
 export async function explainCodeStructured(code: string): Promise<StructuredExplanation> {
     const prompt = `Analyze this code and provide a structured explanation.\n\n${code}`;
-    const schema = { type: Type.OBJECT, properties: { summary: { type: Type.STRING }, lineByLine: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { lines: { type: Type.STRING }, explanation: { type: Type.STRING } } } }, complexity: { type: Type.OBJECT, properties: { time: { type: Type.STRING }, space: { type: Type.STRING } } }, suggestions: { type: Type.ARRAY, items: { type: Type.STRING } } } };
+    // Replaced Type.X with string literals as Type is not imported/defined
+    const schema = { type: 'object', properties: { summary: { type: 'string' }, lineByLine: { type: 'array', items: { type: 'object', properties: { lines: { type: 'string' }, explanation: { type: 'string' } } } }, complexity: { type: 'object', properties: { time: { type: 'string' }, space: { type: 'string' } } }, suggestions: { type: 'array', items: { type: 'string' } } } };
     return generateJson(prompt, "You are an expert code analyst that returns data in JSON format.", schema);
 }
 
 export async function generatePrSummaryStructured(diff: string): Promise<StructuredPrSummary> {
     const prompt = `Generate a structured PR summary for this diff:\n\n${diff}`;
-    const schema = { type: Type.OBJECT, properties: { title: { type: Type.STRING }, summary: { type: Type.STRING }, changes: { type: Type.ARRAY, items: { type: Type.STRING } } } };
+    // Replaced Type.X with string literals
+    const schema = { type: 'object', properties: { title: { type: 'string' }, summary: { type: 'string' }, changes: { type: 'array', items: { type: 'string' } } } };
     return generateJson(prompt, "You generate structured PR summaries in JSON format.", schema);
 }
 
@@ -214,13 +220,15 @@ export async function generateCiCdConfig(platform: string, description: string):
 
 export async function generateColorPalette(baseColor: string): Promise<{ colors: string[] }> {
     const prompt = `Generate a 6-color UI palette from the base color ${baseColor}.`;
-    const schema = { type: Type.OBJECT, properties: { colors: { type: Type.ARRAY, items: { type: Type.STRING } } } };
+    // Replaced Type.X with string literals
+    const schema = { type: 'object', properties: { colors: { type: 'array', items: { type: 'string' } } } };
     return generateJson(prompt, "You are a UI design expert. Return a JSON object with a 'colors' array of 6 hex codes.", schema, 0.8);
 }
 
 export async function generateCronFromDescription(description: string): Promise<CronParts> {
     const prompt = `Convert this description to a cron expression parts: "${description}"`;
-    const schema = { type: Type.OBJECT, properties: { minute: { type: Type.STRING }, hour: { type: Type.STRING }, dayOfMonth: { type: Type.STRING }, month: { type: Type.STRING }, dayOfWeek: { type: Type.STRING } } };
+    // Replaced Type.X with string literals
+    const schema = { type: 'object', properties: { minute: { type: 'string' }, hour: { type: 'string' }, dayOfMonth: { type: 'string' }, month: { type: 'string' }, dayOfWeek: { type: 'string' } } };
     return generateJson(prompt, "You are a cron job expert. You return a JSON object with the parts of a cron expression.", schema, 0.2);
 }
 
@@ -231,7 +239,8 @@ export async function generateTerraformConfig(cloud: 'aws' | 'gcp', description:
 }
 
 export async function generateSemanticTheme(prompt: { parts: any[] }): Promise<SemanticColorTheme> {
-    const schema = { type: Type.OBJECT, properties: { mode: { type: Type.STRING, enum: ['light', 'dark'] }, palette: { type: Type.OBJECT, properties: { primary: { type: Type.OBJECT, properties: { value: { type: Type.STRING }, name: { type: Type.STRING } } }, secondary: { type: Type.OBJECT, properties: { value: { type: Type.STRING }, name: { type: Type.STRING } } }, accent: { type: Type.OBJECT, properties: { value: { type: Type.STRING }, name: { type: Type.STRING } } }, neutral: { type: Type.OBJECT, properties: { value: { type: Type.STRING }, name: { type: Type.STRING } } } } }, theme: { type: Type.OBJECT, properties: { background: { type: Type.OBJECT, properties: { value: { type: Type.STRING }, name: { type: Type.STRING } } }, surface: { type: Type.OBJECT, properties: { value: { type: Type.STRING }, name: { type: Type.STRING } } }, textPrimary: { type: Type.OBJECT, properties: { value: { type: Type.STRING }, name: { type: Type.STRING } } }, textSecondary: { type: Type.OBJECT, properties: { value: { type: Type.STRING }, name: { type: Type.STRING } } }, textOnPrimary: { type: Type.OBJECT, properties: { value: { type: Type.STRING }, name: { type: Type.STRING } } }, border: { type: Type.OBJECT, properties: { value: { type: Type.STRING }, name: { type: Type.STRING } } } } }, accessibility: { type: Type.OBJECT, properties: { primaryOnSurface: { type: Type.OBJECT, properties: { ratio: { type: Type.NUMBER }, score: { type: Type.STRING } } }, textPrimaryOnSurface: { type: Type.OBJECT, properties: { ratio: { type: Type.NUMBER }, score: { type: Type.STRING } } }, textSecondaryOnSurface: { type: Type.OBJECT, properties: { ratio: { type: Type.NUMBER }, score: { type: Type.STRING } } }, textOnPrimaryOnPrimary: { type: Type.OBJECT, properties: { ratio: { type: Type.NUMBER }, score: { type: Type.STRING } } } } } } };
+    // Replaced Type.X with string literals
+    const schema = { type: 'object', properties: { mode: { type: 'string', enum: ['light', 'dark'] }, palette: { type: 'object', properties: { primary: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, secondary: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, accent: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, neutral: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } } } }, theme: { type: 'object', properties: { background: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, surface: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, textPrimary: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, textSecondary: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, textOnPrimary: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } }, border: { type: 'object', properties: { value: { type: 'string' }, name: { type: 'string' } } } } }, accessibility: { type: 'object', properties: { primaryOnSurface: { type: 'object', properties: { ratio: { type: 'number' }, score: { type: 'string' } } }, textPrimaryOnSurface: { type: 'object', properties: { ratio: { type: 'number' }, score: { type: 'string' } } }, textSecondaryOnSurface: { type: 'object', properties: { ratio: { type: 'number' }, score: { type: 'string' } } }, textOnPrimaryOnPrimary: { type: 'object', properties: { ratio: { type: 'number' }, score: { type: 'string' } } } } } } };
     return generateJson(prompt, "You are a UI/UX designer specializing in color theory and accessibility. Generate a complete theme based on the user's prompt, adhering to the provided JSON schema.", schema, 0.8);
 }
 
@@ -247,4 +256,5 @@ export async function analyzePerformanceTrace(traceData: any): Promise<string> {
     return generateContent(prompt, systemInstruction, 0.5);
 }
 
-export { getInferenceFunction, generateImageFromImageAndText, analyzeCodeForVulnerabilities, detectCodeSmells, generateTagsForCode, generateFeature, generateFullStackFeature, generateAppFeatureComponent, generatePipelineCode, createApiDocumentation, jsonToTypescriptInterface, suggestAlternativeLibraries, explainRegex, generateTechnicalSpecFromDiff, generateThemeFromDescription, generateMockData, sqlToApiEndpoints, reviewCodeStructured } from './aiService';
+// Pruned the re-export list to only include members that exist in './aiService'
+export { getInferenceFunction, generateImageFromImageAndText, analyzeCodeForVulnerabilities, detectCodeSmells, generateTagsForCode, generateFeature, generateFullStackFeature, generateAppFeatureComponent, generatePipelineCode, generateTechnicalSpecFromDiff, generateMockData } from './aiService';
