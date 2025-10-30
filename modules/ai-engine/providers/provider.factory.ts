@@ -7,7 +7,7 @@ import { IAiProvider } from './iai-provider.ts';
 import { GeminiProvider } from './gemini.provider.ts';
 import { OpenAiProvider } from './openai.provider.ts';
 import { AiProviderType } from '../../../services/aiProviderState.ts';
-import { SecurityCoreService } from '../../security-core/security-core.service.ts';
+import { ISecurityCore } from '../../security-core/i-security-core.service.ts'; // Changed to import the interface
 
 /**
  * @class ProviderFactory
@@ -19,17 +19,17 @@ import { SecurityCoreService } from '../../security-core/security-core.service.t
 export class ProviderFactory {
   /**
    * @private
-   * @type {SecurityCoreService}
+   * @type {ISecurityCore}
    * @description The service for retrieving decrypted credentials from the vault.
    */
-  private readonly credentialService: SecurityCoreService;
+  private readonly credentialService: ISecurityCore; // Changed type to ISecurityCore
 
   /**
    * @constructor
    * @description Creates an instance of ProviderFactory.
-   * @param {SecurityCoreService} credentialService - The injected credential service, which provides secure access to API keys.
+   * @param {ISecurityCore} credentialService - The injected credential service, which provides secure access to API keys.
    */
-  public constructor(credentialService: SecurityCoreService) {
+  public constructor(credentialService: ISecurityCore) { // Changed parameter type to ISecurityCore
     this.credentialService = credentialService;
   }
 
@@ -42,7 +42,7 @@ export class ProviderFactory {
    * @throws {Error} If the vault is locked, the required API key is not found, or the provider type is unsupported.
    * @example
    * ```typescript
-   * // Assuming credentialService is an instance of a class that implements SecurityCoreService
+   * // Assuming credentialService is an instance of a class that implements ISecurityCore
    * // and has been provided by a DI container.
    * const factory = new ProviderFactory(credentialService);
    * const geminiProvider = await factory.create('gemini');
