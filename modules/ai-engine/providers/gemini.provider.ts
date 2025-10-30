@@ -1,9 +1,10 @@
+```typescript
 /**
  * @file Implements the AI provider interface for Google's Gemini models.
  * @license SPDX-License-Identifier: Apache-2.0
  */
 
-import { GoogleGenerativeAI, GenerateContentRequest, Tool, FunctionDeclarationsTool, GenerateContentStreamResult, FunctionCall } from "@google/genai";
+import { GoogleGenerativeAI, GenerateContentRequest, Tool, FunctionDeclaration, GenerateContentStreamResult, FunctionCall } from "@google/genai";
 import { inject, injectable } from "inversify";
 import "reflect-metadata";
 import { SecurityCoreService } from '../../security-core/security-core.service';
@@ -43,10 +44,10 @@ export interface IAiProvider {
   /**
    * Generates a response that may include function calls for the client to execute.
    * @param {GenerateContentRequest} request - The content generation request.
-   * @param {FunctionDeclarationsTool[]} tools - The tools (function declarations) available to the model.
+   * @param {Tool[]} tools - The tools (function declarations) available to the model.
    * @returns {Promise<{ text: string | null; functionCalls: { name: string; args: any; }[] | null; }>} An object containing text and/or function calls.
    */
-  generateContentWithFunctionCalling(request: GenerateContentRequest, tools: FunctionDeclarationsTool[]): Promise<{ text: string | null; functionCalls: { name: string; args: any; }[] | null; }>;
+  generateContentWithFunctionCalling(request: GenerateContentRequest, tools: Tool[]): Promise<{ text: string | null; functionCalls: { name: string; args: any; }[] | null; }>;
 
   /**
    * Generates an image from a text prompt.
@@ -197,7 +198,7 @@ export class GeminiProvider implements IAiProvider {
      * const result = await geminiProvider.generateContentWithFunctionCalling(request, tools);
      * ```
      */
-    public async generateContentWithFunctionCalling(request: GenerateContentRequest, tools: FunctionDeclarationsTool[]): Promise<{ text: string | null; functionCalls: { name: string; args: any; }[] | null; }> {
+    public async generateContentWithFunctionCalling(request: GenerateContentRequest, tools: Tool[]): Promise<{ text: string | null; functionCalls: { name: string; args: any; }[] | null; }> {
         try {
             const aiClient = await this.getAiClient();
             const model = aiClient.getGenerativeModel({ model: "gemini-1.5-flash" });
@@ -229,3 +230,4 @@ export class GeminiProvider implements IAiProvider {
       return Promise.resolve(`data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><text y="50" x="50">Not Impl</text></svg>')}`);
     }
 }
+```
