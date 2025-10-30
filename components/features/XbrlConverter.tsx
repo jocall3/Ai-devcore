@@ -1,5 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { streamContent } from '../../services/index.ts';
+import { convertJsonToXbrlStream } from '../../services/index.ts';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { XbrlConverterIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 
@@ -23,6 +26,11 @@ export const XbrlConverter: React.FC<{ jsonInput?: string }> = ({ jsonInput: ini
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>('');
 
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
     const handleConvert = useCallback(async (jsonToConvert: string) => {
         if (!jsonToConvert.trim()) {
             setError('Please enter valid JSON to convert.');
@@ -32,9 +40,24 @@ export const XbrlConverter: React.FC<{ jsonInput?: string }> = ({ jsonInput: ini
         setError('');
         setXbrlOutput('');
         try {
-            const prompt = `Convert the following JSON data into a valid, simplified XBRL XML format. The XBRL should represent the financial data contained in the JSON. Do not include any explanatory text, markdown formatting, or code fences—only the raw XML output.\n\nJSON Data:\n\`\`\`json\n${jsonToConvert}\n\`\`\``;
-            const systemInstruction = "You are an API that converts JSON financial data to XBRL XML format.";
-            const stream = streamContent(prompt, systemInstruction);
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
+            const stream = convertJsonToXbrlStream(jsonToConvert);
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;
@@ -43,10 +66,11 @@ export const XbrlConverter: React.FC<{ jsonInput?: string }> = ({ jsonInput: ini
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
             setError(`Failed to convert: ${errorMessage}`);
+            addNotification(`Conversion failed: ${errorMessage}`, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
@@ -83,7 +107,7 @@ export const XbrlConverter: React.FC<{ jsonInput?: string }> = ({ jsonInput: ini
                         {isLoading && !xbrlOutput && <div className="flex items-center justify-center h-full"><LoadingSpinner /></div>}
                         {error && <p className="p-4 text-red-500">{error}</p>}
                         {xbrlOutput && <MarkdownRenderer content={'```xml\n' + xbrlOutput.replace(/```xml\n|```/g, '') + '\n```'} />}
-                        {!isLoading && xbrlOutput && <button onClick={() => navigator.clipboard.writeText(xbrlOutput)} className="absolute top-2 right-2 px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-xs">Copy XML</button>}
+                        {!isLoading && xbrlOutput && <button onClick={() => navigator.clipboard.writeText(xbrlOutput.replace(/```xml\n?|```/g, ''))} className="absolute top-2 right-2 px-2 py-1 bg-gray-100 hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600 rounded-md text-xs">Copy XML</button>}
                         {!isLoading && !xbrlOutput && !error && <div className="text-text-secondary h-full flex items-center justify-center">Output will appear here.</div>}
                     </div>
                 </div>
