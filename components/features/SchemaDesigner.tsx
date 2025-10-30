@@ -29,7 +29,9 @@ export const SchemaDesigner: React.FC = () => {
     const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!dragging || !canvasRef.current) return;
         const canvasRect = canvasRef.current.getBoundingClientRect();
-        setTables(tables.map(t => t.id === dragging.id ? { ...t, x: e.clientX - dragging.offsetX - canvasRect.left + canvasRef.current.scrollLeft, y: e.clientY - dragging.offsetY - canvasRect.top + canvasRef.current.scrollTop } : t));
+        const scrollLeft = canvasRef.current.scrollLeft;
+        const scrollTop = canvasRef.current.scrollTop;
+        setTables(tables.map(t => t.id === dragging.id ? { ...t, x: e.clientX - dragging.offsetX - canvasRect.left + scrollLeft, y: e.clientY - dragging.offsetY - canvasRect.top + scrollTop } : t));
     };
 
     const onMouseUp = () => setDragging(null);
@@ -41,7 +43,7 @@ export const SchemaDesigner: React.FC = () => {
                 <main ref={canvasRef} className="flex-grow relative bg-background rounded-lg border-2 border-dashed border-border overflow-auto" onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp}>
                     {tables.map(table => (
                         <div key={table.id} className={`absolute w-64 bg-surface rounded-lg shadow-xl border cursor-grab active:cursor-grabbing ${dragging?.id === table.id ? 'border-primary' : 'border-border'}`} style={{ top: table.y, left: table.x }} onMouseDown={e => onMouseDown(e, table.id)}>
-                            <h3 className="font-bold text-primary text-lg p-2 bg-gray-50 rounded-t-lg border-b border-border">{table.name}</h3>
+                            <h3 className="font-bold text-primary text-lg p-2 bg-gray-50 dark:bg-slate-700/50 rounded-t-lg border-b border-border">{table.name}</h3>
                             <div className="p-2 space-y-1 font-mono text-xs">
                                 {table.columns.map(col => (<div key={col.id} className="flex justify-between items-center"><span className="text-text-primary">{col.name}</span><span className="text-text-secondary">{col.type}</span></div>))}
                             </div>
@@ -50,7 +52,7 @@ export const SchemaDesigner: React.FC = () => {
                 </main>
                 <aside className="w-80 flex-shrink-0 flex flex-col gap-4">
                     <div className="flex flex-col gap-2">
-                         <button onClick={() => downloadFile(JSON.stringify(tables, null, 2), 'schema.json', 'application/json')} className="flex-1 text-sm py-2 bg-gray-100 border border-border rounded-md flex items-center justify-center gap-2 hover:bg-gray-200">
+                         <button onClick={() => downloadFile(JSON.stringify(tables, null, 2), 'schema.json', 'application/json')} className="flex-1 text-sm py-2 bg-gray-100 dark:bg-slate-700 border border-border rounded-md flex items-center justify-center gap-2 hover:bg-gray-200 dark:hover:bg-slate-600">
                             <ArrowDownTrayIcon className="w-4 h-4"/> Download JSON
                         </button>
                          <button onClick={() => downloadFile(exportToSQL(tables), 'schema.sql', 'application/sql')} className="btn-primary flex-1 text-sm py-2 flex items-center justify-center gap-2">

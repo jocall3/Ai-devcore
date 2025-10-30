@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import * as Diff from 'diff';
-import { applySpecificRefactor, refactorForPerformance, refactorForReadability, generateJsDoc, convertToFunctionalComponent } from '../../services/aiService.ts';
+import { refactorForPerformance, refactorForReadability, generateJsDoc, convertToFunctionalComponent } from '../../services/index.ts';
 import { SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 

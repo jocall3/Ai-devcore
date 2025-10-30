@@ -1,17 +1,18 @@
-
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { generateRegExStream } from '../../services/aiService.ts';
+import { generateRegExStream } from '../../services/index.ts';
 import { BeakerIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const commonPatterns = [
-    { name: 'Email', pattern: '/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g' },
+    { name: 'Email', pattern: '/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.{2,}/g' },
     { name: 'URL', pattern: '/https?:\\/\\/(www\\.)?[-a-zA-Z0-9@:%._\\+~#=]{1,256}\\.[a-zA-Z0-9()]{1,6}\\b([-a-zA-Z0-9()@:%_\\+.~#?&//=]*)/g' },
     { name: 'IPv4 Address', pattern: '/((25[0-5]|(2[0-4]|1\\d|[1-9]|)\\d)\\.?\\b){4}/g' },
     { name: 'Date (YYYY-MM-DD)', pattern: '/\\d{4}-\\d{2}-\\d{2}/g' },
 ];
 
-const CheatSheet = () => (
+const CheatSheet: React.FC = () => (
     <div className="bg-surface border border-border p-4 rounded-lg">
         <h3 className="text-lg font-bold mb-2">Regex Cheat Sheet</h3>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono">
@@ -36,32 +37,61 @@ export const RegexSandbox: React.FC<{ initialPrompt?: string }> = ({ initialProm
     const [testString, setTestString] = useState<string>('The quick Brown Fox jumps over the Lazy Dog.');
     const [aiPrompt, setAiPrompt] = useState<string>(initialPrompt || 'find capitalized words and the word after');
     const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+    
+    const { requestUnlock } = useVaultModal();
+    const { addNotification } = useNotification();
 
-    const { matches, error } = useMemo(() => {
+    const { matches, parseError } = useMemo(() => {
         try {
             const patternParts = pattern.match(/^\/(.*)\/([gimyus]*)$/);
-            if (!patternParts) return { matches: null, error: 'Invalid regex literal. Use /pattern/flags.' };
+            if (!patternParts) return { matches: null, parseError: 'Invalid regex literal. Use /pattern/flags.' };
             const [, regexBody, regexFlags] = patternParts;
             const regex = new RegExp(regexBody, regexFlags);
-            return { matches: [...testString.matchAll(regex)], error: null };
-        } catch (e) { return { matches: null, error: e instanceof Error ? e.message : 'Unknown error.' }; }
+            return { matches: [...testString.matchAll(regex)], parseError: null };
+        } catch (e) { return { matches: null, parseError: e instanceof Error ? e.message : 'Unknown error.' }; }
     }, [pattern, testString]);
+
+    const generate = async (prompt: string) => {
+        const stream = generateRegExStream(prompt);
+        let fullResponse = '';
+        for await (const chunk of stream) { fullResponse += chunk; }
+        setPattern(fullResponse.trim().replace(/^`+|`+$/g, ''));
+    };
     
     const handleGenerateRegex = useCallback(async (p: string) => {
         if (!p) return;
         setIsAiLoading(true);
+        setError(null);
         try {
-            const stream = generateRegExStream(p);
-            let fullResponse = '';
-            for await (const chunk of stream) { fullResponse += chunk; }
-            setPattern(fullResponse.trim().replace(/^`+|`+$/g, ''));
-        } finally { setIsAiLoading(false); }
-    }, []);
+            await generate(p);
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            if (errorMessage.includes('Vault is locked')) {
+                addNotification('Your vault is locked. Please unlock it to use AI features.', 'info');
+                const unlocked = await requestUnlock();
+                if (unlocked) {
+                    try {
+                        await generate(p); // Retry
+                    } catch (retryErr) {
+                        const retryMsg = retryErr instanceof Error ? retryErr.message : 'Unknown retry error.';
+                        setError(retryMsg);
+                        addNotification(`Error: ${retryMsg}`, 'error');
+                    }
+                }
+            } else {
+                setError(errorMessage);
+                addNotification(`Error: ${errorMessage}`, 'error');
+            }
+        } finally {
+            setIsAiLoading(false);
+        }
+    }, [addNotification, requestUnlock]);
 
     useEffect(() => { if (initialPrompt) handleGenerateRegex(initialPrompt); }, [initialPrompt, handleGenerateRegex]);
 
     const highlightedString = useMemo(() => {
-        if (!matches || matches.length === 0 || error) return testString;
+        if (!matches || matches.length === 0 || parseError) return testString;
         let lastIndex = 0;
         const parts: React.ReactNode[] = [];
         matches.forEach((match, i) => {
@@ -72,7 +102,7 @@ export const RegexSandbox: React.FC<{ initialPrompt?: string }> = ({ initialProm
         });
         parts.push(testString.substring(lastIndex));
         return parts;
-    }, [matches, testString, error]);
+    }, [matches, testString, parseError]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
@@ -80,9 +110,9 @@ export const RegexSandbox: React.FC<{ initialPrompt?: string }> = ({ initialProm
             <div className="flex-grow grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-0">
                 <div className="lg:col-span-2 flex flex-col gap-4">
                     <div className="flex gap-2"><input type="text" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} placeholder="Describe the pattern to find..." className="flex-grow px-3 py-1.5 rounded-md bg-surface border border-border text-sm focus:ring-2 focus:ring-primary" /><button onClick={() => handleGenerateRegex(aiPrompt)} disabled={isAiLoading} className="btn-primary px-4 py-1.5 flex items-center">{isAiLoading ? <LoadingSpinner/> : 'Generate'}</button></div>
-                    <div><label htmlFor="regex-pattern" className="text-sm font-medium text-text-secondary">Regular Expression</label><input id="regex-pattern" type="text" value={pattern} onChange={(e) => setPattern(e.target.value)} className={`w-full mt-1 px-3 py-2 rounded-md bg-surface border ${error ? 'border-red-500' : 'border-border'} font-mono text-sm focus:ring-2 focus:ring-primary`} />{error && <p className="text-red-500 text-xs mt-1">{error}</p>}</div>
+                    <div><label htmlFor="regex-pattern" className="text-sm font-medium text-text-secondary">Regular Expression</label><input id="regex-pattern" type="text" value={pattern} onChange={(e) => setPattern(e.target.value)} className={`w-full mt-1 px-3 py-2 rounded-md bg-surface border ${parseError ? 'border-red-500' : 'border-border'} font-mono text-sm focus:ring-2 focus:ring-primary`} />{parseError && <p className="text-red-500 text-xs mt-1">{parseError}</p>}</div>
                     <div className="flex flex-col flex-grow min-h-0"><label htmlFor="test-string" className="text-sm font-medium text-text-secondary">Test String</label><textarea id="test-string" value={testString} onChange={(e) => setTestString(e.target.value)} className="w-full mt-1 p-3 rounded-md bg-surface border border-border font-mono text-sm resize-y h-32" /><div className="mt-2 p-3 bg-background rounded-md border border-border min-h-[50px] whitespace-pre-wrap">{highlightedString}</div></div>
-                    <div className="flex-shrink-0"><h3 className="text-lg font-bold">Match Groups ({matches?.length || 0})</h3><div className="mt-2 p-2 bg-surface rounded-md overflow-y-auto max-h-48 font-mono text-xs border border-border">{matches && matches.length > 0 ? (matches.map((match, i) => (<details key={i} className="p-2 border-b border-border"><summary className="cursor-pointer text-green-700">Match {i + 1}: "{match[0]}"</summary><div className="pl-4 mt-1">{Array.from(match).map((group, gIndex) => <p key={gIndex} className="text-text-secondary">Group {gIndex}: <span className="text-amber-700">{String(group)}</span></p>)}</div></details>))) : (<p className="text-text-secondary text-sm p-2">No matches found.</p>)}</div></div>
+                    <div className="flex-shrink-0"><h3 className="text-lg font-bold">Match Groups ({matches?.length || 0})</h3><div className="mt-2 p-2 bg-surface rounded-md overflow-y-auto max-h-48 font-mono text-xs border border-border">{error && <p className='text-red-500 p-2'>{error}</p>}{matches && matches.length > 0 ? (matches.map((match, i) => (<details key={i} className="p-2 border-b border-border"><summary className="cursor-pointer text-green-700">Match {i + 1}: "{match[0]}"</summary><div className="pl-4 mt-1">{Array.from(match).map((group, gIndex) => <p key={gIndex} className="text-text-secondary">Group {gIndex}: <span className="text-amber-700">{String(group)}</span></p>)}</div></details>))) : (<p className="text-text-secondary text-sm p-2">No matches found.</p>)}</div></div>
                 </div>
                 <div className="lg:col-span-1 space-y-4">
                     <CheatSheet />

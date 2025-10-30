@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { initializeOctokit } from '../../services/authService.ts';
 import { getDecryptedCredential } from '../../services/vaultService.ts';
 import { getRepos, getRepoTree, getFileContent, commitFiles } from '../../services/githubService.ts';
-import { generateCommitMessageStream } from '../../services/index.ts';
+import { generateCommitMessageStream } from '../../services/aiService.ts';
 import type { Repo, FileNode } from '../../types.ts';
 import { FolderIcon, DocumentIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
@@ -47,8 +48,9 @@ const FileTree: React.FC<{ node: FileNode, onFileSelect: (path: string, name: st
 
 export const ProjectExplorer: React.FC = () => {
     const { state, dispatch } = useGlobalState();
-    const { user, githubUser, selectedRepo, projectFiles } = state;
+    const { user, githubUser, selectedRepo, projectFiles, vaultState } = state;
     const { addNotification } = useNotification();
+    const { requestUnlock, requestCreation } = useVaultModal();
     const [repos, setRepos] = useState<Repo[]>([]);
     const [isLoading, setIsLoading] = useState<'repos' | 'tree' | 'file' | 'commit' | null>(null);
     const [error, setError] = useState('');
@@ -58,14 +60,26 @@ export const ProjectExplorer: React.FC = () => {
         if (!user) {
             throw new Error("You must be logged in to use the Project Explorer.");
         }
-        // NOTE: This assumes the vault is unlocked. A more robust implementation
-        // might use the useVaultModal hook to prompt for unlock if needed.
+
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (!created) {
+                throw new Error("Vault setup is required to access GitHub.");
+            }
+        }
+        if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (!unlocked) {
+                throw new Error("Vault must be unlocked to access GitHub.");
+            }
+        }
+        
         const token = await getDecryptedCredential('github_pat');
         if (!token) {
             throw new Error("GitHub token not found. Please add it on the Connections page.");
         }
         return initializeOctokit(token);
-    }, [user]);
+    }, [user, vaultState, requestUnlock, requestCreation]);
 
 
     useEffect(() => {
@@ -129,6 +143,13 @@ export const ProjectExplorer: React.FC = () => {
         setIsLoading('commit');
         setError('');
         try {
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    throw new Error("Vault must be unlocked to generate a commit message.");
+                }
+            }
+
             const diff = Diff.createPatch(activeFile.path, activeFile.originalContent, activeFile.editedContent);
             
             const stream = generateCommitMessageStream(diff);
