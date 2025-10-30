@@ -1,3 +1,4 @@
+```typescript
 /**
  * @fileoverview This file defines the Workspace Connector Service module.
  * This service acts as a centralized command handler for all actions related to
@@ -9,30 +10,19 @@
 import { injectable, inject } from 'inversify';
 import 'reflect-metadata';
 import { logEvent, logError } from '../../services/telemetryService';
+import { Octokit } from '@octokit/rest'; // Added for GitHub client
 
-// --- Mocked/Assumed Interfaces for DI and Inter-module Communication ---
+// --- Imported Interfaces for DI and Inter-module Communication ---
 
-/**
- * @interface IEventBus
- * @description Assumed interface for the application's central event bus.
- */
-export interface IEventBus {
-  publish(event: string, payload?: any): void;
-  subscribe(event: string, handler: (payload?: any) => void): { unsubscribe: () => void };
-}
-
-/**
- * @interface ISecurityCoreService
- * @description Assumed interface for the Security Core service.
- */
-export interface ISecurityCoreService {
-  isUnlocked(): boolean;
-  getDecryptedCredential(id: string): Promise<string | null>;
-}
+// Importing canonical IEventBus from its presumed location based on service.registry.ts errors
+import { IEventBus } from '../../core/bus/event-bus.service';
+// Importing canonical ISecurityCoreService from its presumed location based on other module errors
+import { ISecurityCoreService } from '../../security-core/i-security-core.service';
 
 /**
  * @const TYPES
  * @description Assumed symbols for InversifyJS dependency injection.
+ * (Kept local for now, as `SERVICE_IDENTIFIER` from `service.registry.ts` appears to have export issues.)
  */
 export const TYPES = {
   EventBus: Symbol.for('EventBus'),
@@ -98,6 +88,13 @@ export interface IWorkspaceConnectorService {
    * @returns {Map<string, IWorkspaceAction>} A map of all registered actions.
    */
   getActions(): Map<string, IWorkspaceAction>;
+
+  /**
+   * Retrieves an authenticated GitHub Octokit client.
+   * Ensures the security vault is unlocked if necessary to retrieve credentials.
+   * @returns {Promise<Octokit | null>} A promise that resolves with an Octokit instance or null if credentials are not found or vault unlock cancelled.
+   */
+  getGithubClient(): Promise<Octokit | null>;
 }
 
 /**
@@ -144,6 +141,7 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
       throw new Error(`Action "${actionId}" not found.`);
     }
 
+    // Ensure vault is unlocked if action might require credentials
     if (!this.securityCore.isUnlocked()) {
       const unlocked = await this.requestVaultUnlock();
       if (!unlocked) {
@@ -170,6 +168,33 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
    */
   public getActions(): Map<string, IWorkspaceAction> {
     return this.actionRegistry;
+  }
+
+  /**
+   * @public
+   * @method getGithubClient
+   * @description Retrieves an authenticated GitHub Octokit client.
+   * Ensures the security vault is unlocked if necessary to retrieve credentials.
+   * @returns {Promise<Octokit | null>} A promise that resolves with an Octokit instance or null if credentials are not found or vault unlock cancelled.
+   */
+  public async getGithubClient(): Promise<Octokit | null> {
+    // Ensure vault is unlocked before attempting to retrieve GitHub credentials
+    if (!this.securityCore.isUnlocked()) {
+      const unlocked = await this.requestVaultUnlock();
+      if (!unlocked) {
+        logError(new Error('Vault unlock is required for GitHub client and was cancelled.'), { context: 'getGithubClient' });
+        return null;
+      }
+    }
+
+    const githubToken = await this.securityCore.getDecryptedCredential('github_pat'); // 'github_pat' is assumed credential ID
+    if (!githubToken) {
+      logEvent('github_credentials_missing');
+      return null;
+    }
+
+    logEvent('github_client_initialized');
+    return new Octokit({ auth: githubToken });
   }
 
   /**
@@ -262,7 +287,7 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
         text: { type: 'string', required: true }
       }),
       execute: async (params) => {
-        const token = await this.securityCore.getDecryptedCredential('slack_bot_token');
+        const token = await this.securityCore.getDecryptedCredential('slack_bot_token'); // 'slack_bot_token' is assumed credential ID
         if (!token) {
           throw new Error("Slack credentials not found. Please connect Slack in the Workspace Connector Hub.");
         }
@@ -285,8 +310,9 @@ export class WorkspaceConnectorService implements IWorkspaceConnectorService {
         return response.json();
       }
     };
-    
+
     this.actionRegistry.set(jiraCreateTicketAction.id, jiraCreateTicketAction);
     this.actionRegistry.set(slackPostMessageAction.id, slackPostMessageAction);
   }
 }
+```
