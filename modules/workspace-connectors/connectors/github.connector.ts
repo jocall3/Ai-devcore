@@ -31,7 +31,7 @@ import { logError } from '../../../services/telemetryService.ts';
  *   console.error(error.message); // e.g., "Vault is locked. Please unlock it to use GitHub integrations."
  * }
  */
-const getAuthenticatedOctokit = async (): Promise<Octokit> => {
+export const getAuthenticatedOctokit = async (): Promise<Octokit> => {
     if (!isUnlocked()) {
         throw new Error("Vault is locked. Please unlock it to use GitHub integrations.");
     }
