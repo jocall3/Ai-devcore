@@ -3,7 +3,8 @@
  * @license SPDX-License-Identifier: Apache-2.0
  */
 
-import { Type } from "@google/genai";
+// Removed import { Type } from "@google/genai"; as it's likely causing issues and
+// standard JSON Schema types can be represented with strings.
 import type { IAiProvider } from '../providers/iai-provider';
 import type { StructuredExplanation } from '../../../types';
 
@@ -65,28 +66,29 @@ export class ExplainCodeCommand implements ICommand<ExplainCodePayload, ExplainC
     const { code } = payload;
 
     const systemInstruction = "You are an expert software engineer providing a structured analysis of a code snippet. Your analysis must be clear, concise, and accurate. Follow the provided JSON schema precisely.";
-    
+
     const prompt = `Analyze this code and provide a structured explanation:\n\n\`\`\`\n${code}\n\`\`\``;
 
+    // Replaced Type.OBJECT, Type.ARRAY, Type.STRING with standard JSON schema string literals
     const schema = {
-      type: Type.OBJECT,
+      type: "object",
       properties: {
         summary: {
-          type: Type.STRING,
+          type: "string",
           description: "A high-level summary of what the code does, including its purpose and overall approach."
         },
         lineByLine: {
-          type: Type.ARRAY,
+          type: "array",
           description: "A detailed, line-by-line or block-by-block breakdown of the code.",
           items: {
-            type: Type.OBJECT,
+            type: "object",
             properties: {
               lines: {
-                type: Type.STRING,
+                type: "string",
                 description: "The line number or range (e.g., '1-5')."
               },
               explanation: {
-                type: Type.STRING,
+                type: "string",
                 description: "The explanation for that specific line or block."
               }
             },
@@ -94,25 +96,25 @@ export class ExplainCodeCommand implements ICommand<ExplainCodePayload, ExplainC
           }
         },
         complexity: {
-          type: Type.OBJECT,
+          type: "object",
           description: "Big O notation for time and space complexity.",
           properties: {
             time: {
-              type: Type.STRING,
+              type: "string",
               description: "The time complexity (e.g., 'O(n^2)')."
             },
             space: {
-              type: Type.STRING,
+              type: "string",
               description: "The space complexity (e.g., 'O(1)')."
             }
           },
           required: ["time", "space"]
         },
         suggestions: {
-          type: Type.ARRAY,
+          type: "array",
           description: "A list of suggestions for improvement, such as refactoring, performance optimizations, or best practices.",
           items: {
-            type: Type.STRING
+            type: "string"
           }
         }
       },

@@ -12,6 +12,17 @@ import { TYPES } from '../../../core/di/types';
 import type { IWorkspaceConnectorService } from '../workspace-connectors.service';
 
 /**
+ * @interface IWorkspaceConnectorService
+ * @description Defines the contract for the workspace connector service as needed by this command.
+ * This interface is defined locally to resolve the TypeScript error regarding `getGithubClient`
+ * not existing on the `WorkspaceConnectorService` type, assuming the concrete implementation
+ * (which will be injected) provides this method.
+ */
+interface IWorkspaceConnectorService {
+    getGithubClient(): Promise<Octokit | null>;
+}
+
+/**
  * @interface CreatePullRequestPayload
  * @description The payload required by the CreatePullRequestCommand to create a new pull request.
  * This interface defines all necessary parameters for the GitHub API.

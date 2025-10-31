@@ -1,3 +1,5 @@
+
+
 /**
  * @file This file implements the AI Service module, providing a decoupled architecture for handling AI operations.
  * It uses a central provider (`GeminiProvider`) to interact with the AI model, which securely retrieves
@@ -13,7 +15,7 @@ import type { GeneratedFile, StructuredPrSummary, StructuredExplanation, Semanti
 
 // --- LOCAL INTERFACES FOR DECOUPLING DURING REFACTOR ---
 
-export interface CommandResponse {
+export interface ICommand {
   text: string;
   functionCalls?: { name: string; args: any; }[];
 }
@@ -43,7 +45,7 @@ class GeminiProvider implements IAiProvider {
 
     if (!this.ai || apiKey !== this.lastUsedApiKey) {
       this.lastUsedApiKey = apiKey;
-      this.ai = new GoogleGenerativeAI(apiKey);
+      this.ai = new GoogleGenerativeAI({ apiKey }); // Corrected constructor call for @google/generative-ai
     }
     return this.ai;
   }

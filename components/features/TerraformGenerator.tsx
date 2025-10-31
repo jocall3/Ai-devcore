@@ -18,6 +18,9 @@ export const TerraformGenerator: React.FC = () => {
     const { requestUnlock, requestCreation } = useVaultModal();
     const { addNotification } = useNotification();
 
+    // Retrieve the AI Engine service from the IoC container
+    const aiEngineService = useService<IAIEngineService>(SERVICE_IDENTIFIER.AIEngineService);
+
     const handleGenerate = useCallback(async () => {
         if (!description.trim()) {
             setError('Please provide a description.');
@@ -52,7 +55,7 @@ export const TerraformGenerator: React.FC = () => {
         } finally {
             setIsLoading(false);
         }
-    }, [description, cloud, vaultState, requestCreation, requestUnlock, addNotification]);
+    }, [description, cloud, vaultState, requestCreation, requestUnlock, addNotification, aiEngineService]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">

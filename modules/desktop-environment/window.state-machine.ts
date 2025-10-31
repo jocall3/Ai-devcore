@@ -1,3 +1,4 @@
+```typescript
 /**
  * @fileoverview Defines the state machine for a single window in the desktop environment.
  * This machine manages the window's lifecycle, including states like active, inactive,
@@ -9,9 +10,6 @@ import { setup, assign } from 'xstate';
 
 /**
  * Represents a 2D coordinate.
- * @typedef {object} WindowPosition
- * @property {number} x - The x-coordinate.
- * @property {number} y - The y-coordinate.
  */
 export interface WindowPosition {
   x: number;
@@ -20,9 +18,6 @@ export interface WindowPosition {
 
 /**
  * Represents the dimensions of a window.
- * @typedef {object} WindowSize
- * @property {number} width - The width of the window.
- * @property {number} height - The height of the window.
  */
 export interface WindowSize {
   width: number;
@@ -31,14 +26,6 @@ export interface WindowSize {
 
 /**
  * The context (extended state) for the window state machine.
- * @typedef {object} WindowContext
- * @property {string} id - The unique identifier for the window.
- * @property {WindowPosition} position - The current top-left position of the window.
- * @property {WindowSize} size - The current size of the window.
- * @property {WindowPosition | null} prevPosition - The position before a drag or maximize action, used for restoration.
- * @property {WindowSize | null} prevSize - The size before a maximize or resize action, used for restoration.
- * @property {WindowPosition | null} dragStart - The initial mouse position when a drag starts, relative to the viewport.
- * @property {number} zIndex - The z-index of the window for stacking.
  */
 export interface WindowContext {
   id: string;
@@ -52,8 +39,6 @@ export interface WindowContext {
 
 /**
  * The events that can be sent to the window state machine.
- * @typedef {object} WindowEvent
- * @property {string} type - The type of the event.
  */
 export type WindowEvent =
   | { type: 'FOCUS' }
@@ -99,15 +84,22 @@ export const createWindowMachine = (initialContext: Partial<WindowContext>) => {
     actions: {
       assignDragStart: assign({
         dragStart: ({ event }) => {
-          if (event.type !== 'DRAG_START') return null;
+          // XState v5's type inference should ensure `event` is 'DRAG_START' here
+          // as this action is configured only for 'DRAG_START' transitions.
+          if (event.type !== 'DRAG_START') {
+            console.warn('assignDragStart called with incorrect event type:', event.type);
+            return null;
+          }
           return { x: event.position.x, y: event.position.y };
         },
         prevPosition: ({ context }) => context.position,
       }),
       assignDragPosition: assign({
         position: ({ context, event }) => {
+          // XState v5's type inference should ensure `event` is 'DRAG_MOVE' here.
           if (event.type !== 'DRAG_MOVE' || !context.dragStart || !context.prevPosition) {
-            return context.position;
+            console.warn('assignDragPosition called with incorrect event type or missing context:', event?.type, context.dragStart, context.prevPosition);
+            return context.position; // Fallback to current position if unexpected state
           }
           const dx = event.position.x - context.dragStart.x;
           const dy = event.position.y - context.dragStart.y;
@@ -133,14 +125,18 @@ export const createWindowMachine = (initialContext: Partial<WindowContext>) => {
       }),
       assignZIndex: assign({
         zIndex: ({ event }) => {
-          if (event.type !== 'UPDATE_Z_INDEX') return 0;
+          // XState v5's type inference should ensure `event` is 'UPDATE_Z_INDEX' here.
+          if (event.type !== 'UPDATE_Z_INDEX') {
+            console.warn('assignZIndex called with incorrect event type:', event.type);
+            return 0; // Or context.zIndex, depending on desired fallback
+          }
           return event.zIndex;
         },
       }),
     },
   }).createMachine({
     id: 'window',
-    predictableActionArguments: true,
+    // predictableActionArguments: true is an XState v4 option and is not used with setup() in v5.
     context: {
       id: '',
       position: { x: 50, y: 50 },
@@ -228,3 +224,4 @@ export const createWindowMachine = (initialContext: Partial<WindowContext>) => {
     },
   });
 };
+```

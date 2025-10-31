@@ -1,3 +1,4 @@
+```typescript
 /**
  * @file Service for interacting with the sandboxed Security Core Web Worker.
  * @license SPDX-License-Identifier: Apache-2.0
@@ -202,3 +203,4 @@ export class SecurityCoreService {
     return this.postCommandToWorker<string>(SecurityCoreCommand.RETRIEVE_CREDENTIAL, { ciphertext: encryptedData.ciphertext, iv: encryptedData.iv });
   }
 }
+```

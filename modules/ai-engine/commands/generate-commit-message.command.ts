@@ -1,3 +1,4 @@
+
 /**
  * @file Implements the command for generating a commit message.
  * @license Apache-2.0

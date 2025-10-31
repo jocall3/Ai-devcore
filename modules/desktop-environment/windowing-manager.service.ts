@@ -1,3 +1,4 @@
+
 /**
  * @file Defines the WindowingManager service responsible for window state management.
  * @license SPDX-License-Identifier: Apache-2.0
@@ -111,6 +112,8 @@ export class WindowingManagerService {
 
     this.focusWindow(newWindowId);
     
+    // Using explicit event names here. If IEventBus expects a specific AppEventMap,
+    // these strings should be defined there or passed through a strongly-typed enum.
     this.eventBus.publish('window:opened', { windowId: newWindowId, featureId });
     this._broadcastWindowState();
 

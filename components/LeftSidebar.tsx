@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ViewType, SidebarItem } from '@/types.ts';
+import type { ViewType, SidebarItem } from '../types.ts';
 import { useGlobalState } from '@/contexts/GlobalStateContext.tsx';
 import { signOutUser } from '@/services/googleAuthService.ts';
 import { ArrowLeftOnRectangleIcon, LockClosedIcon } from '@/components/icons.tsx';

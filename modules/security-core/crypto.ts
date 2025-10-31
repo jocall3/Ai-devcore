@@ -17,7 +17,7 @@ const IV_LENGTH = 12; // 96 bits is recommended for AES-GCM
  * @param {ArrayBuffer} salt - The salt to use for derivation.
  * @returns {Promise<CryptoKey>} A promise that resolves to the derived CryptoKey.
  */
-export async function deriveKey(password: string, salt: ArrayBuffer): Promise<CryptoKey> {
+async function deriveKey(password: string, salt: ArrayBuffer): Promise<CryptoKey> {
   const masterKey = await self.crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(password),
@@ -46,7 +46,7 @@ export async function deriveKey(password: string, salt: ArrayBuffer): Promise<Cr
  * @param {CryptoKey} key - The session key to use for encryption.
  * @returns {Promise<{ ciphertext: ArrayBuffer, iv: Uint8Array }>} A promise that resolves to an object containing the ciphertext and initialization vector (IV).
  */
-export async function encrypt(plaintext: string, key: CryptoKey): Promise<{ ciphertext: ArrayBuffer, iv: Uint8Array }> {
+async function encrypt(plaintext: string, key: CryptoKey): Promise<{ ciphertext: ArrayBuffer, iv: Uint8Array }> {
   const iv = self.crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const encodedPlaintext = new TextEncoder().encode(plaintext);
 
@@ -70,7 +70,7 @@ export async function encrypt(plaintext: string, key: CryptoKey): Promise<{ ciph
  * @returns {Promise<string>} A promise that resolves to the decrypted plaintext string.
  * @throws {Error} If decryption fails (e.g., due to incorrect key, IV, or tampered data).
  */
-export async function decrypt(ciphertext: ArrayBuffer, key: CryptoKey, iv: Uint8Array): Promise<string> {
+async function decrypt(ciphertext: ArrayBuffer, key: CryptoKey, iv: Uint8Array): Promise<string> {
   try {
     const decrypted = await self.crypto.subtle.decrypt(
       {
@@ -88,3 +88,10 @@ export async function decrypt(ciphertext: ArrayBuffer, key: CryptoKey, iv: Uint8
     throw new Error('Decryption failed. The data may be corrupt or the key/IV is incorrect.');
   }
 }
+
+// Export all functions as a default object to satisfy the default import in services/vaultService.ts
+export default {
+  deriveKey,
+  encrypt,
+  decrypt,
+};

@@ -21,7 +21,7 @@ import { SecurityCoreService } from '../../security-core/security-core.service.t
 export class ProviderFactory {
   /**
    * @private
-   * @type {SecurityCoreService}
+   * @type {ISecurityCore}
    * @description The service for retrieving decrypted credentials from the vault.
    */
   private readonly securityCore: SecurityCoreService;

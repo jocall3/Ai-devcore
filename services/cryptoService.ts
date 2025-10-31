@@ -106,3 +106,15 @@ export const decrypt = async (data: EncryptedData): Promise<{ id: string, plaint
   const plaintext = await postCommandToWorker<string>('decrypt', { ciphertext: data.ciphertext, iv: data.iv });
   return { id: data.id, plaintext };
 };
+
+// Export all functions as a default object to satisfy `import crypto from './cryptoService.ts';`
+export default {
+  initSecurityCore,
+  generateSalt,
+  initializeVault,
+  unlockVault,
+  isVaultUnlocked,
+  lockVault,
+  encrypt,
+  decrypt,
+};

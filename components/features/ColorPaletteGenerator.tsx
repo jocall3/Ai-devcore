@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { generateColorPalette, downloadFile } from '../../services/index.ts';
@@ -7,6 +8,28 @@ import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
 import type { SemanticColorTheme } from '../../types.ts';
+
+// Define the expected structure for the AI-generated palette result
+interface ColorValue {
+    value: string;
+}
+
+interface AIGeneratedPalette {
+    palette: {
+        primary: ColorValue;
+        secondary: ColorValue;
+        accent: ColorValue;
+        neutral: ColorValue;
+    };
+    theme: {
+        background: ColorValue;
+        surface: ColorValue;
+        textPrimary: ColorValue;
+        textSecondary: ColorValue;
+        textOnPrimary: ColorValue;
+        border: ColorValue;
+    };
+}
 
 interface PreviewColors {
     cardBg: string;
