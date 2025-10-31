@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { suggestA11yFix } from '../../services/aiService.ts';
+import { suggestA11yFix } from '../../services/index.ts';
 import { runAxeAudit, AxeResult } from '../../services/auditing/accessibilityService.ts';
 import { EyeIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';

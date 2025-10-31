@@ -7,11 +7,15 @@
 import { injectable, inject } from 'inversify';
 import 'reflect-metadata';
 
-// Corrected imports based on new architecture
 import { IAiProvider, Prompt, PromptPart, CommandResponse } from './iai-provider';
-import { ISecurityCore } from '../../security-core/i-security-core.service';
-import { SERVICE_IDENTIFIER } from '../../service.registry';
+import { TYPES } from '../../core/di/types';
 import { logError } from '../../../services/telemetryService';
+
+// Local interface to represent the Security Core contract during refactoring.
+// In a finalized architecture, this would be imported from a shared types file.
+interface ISecurityCore {
+    getDecryptedCredential(id: string): Promise<string | null>;
+}
 
 /**
  * @class OpenAiProvider
@@ -23,7 +27,6 @@ import { logError } from '../../../services/telemetryService';
 export class OpenAiProvider implements IAiProvider {
     private readonly chatApiUrl = 'https://api.openai.com/v1/chat/completions';
     private readonly imageApiUrl = 'https://api.openai.com/v1/images/generations';
-    private apiKey: string | null = null;
     private readonly securityCore: ISecurityCore;
 
     /**
@@ -31,7 +34,7 @@ export class OpenAiProvider implements IAiProvider {
      * @param {ISecurityCore} securityCore - Injected Security Core service for secure credential access.
      */
     public constructor(
-        @inject(SERVICE_IDENTIFIER.SecurityCore) securityCore: ISecurityCore
+        @inject(TYPES.SecurityCore) securityCore: ISecurityCore
     ) {
         this.securityCore = securityCore;
     }
@@ -43,18 +46,12 @@ export class OpenAiProvider implements IAiProvider {
      * @throws {Error} If the API key is not found or the vault is locked.
      */
     private async getApiKey(): Promise<string> {
-        // Use a cached key for the session if available
-        if (this.apiKey) {
-            return this.apiKey;
-        }
-        
         // This call will throw an error if the vault is locked, which is the desired behavior.
         const key = await this.securityCore.getDecryptedCredential('openai_api_key');
         if (!key) {
             throw new Error('OpenAI API key not found. Please add it in the Workspace Connector Hub.');
         }
-        this.apiKey = key;
-        return this.apiKey;
+        return key;
     }
 
     /**
@@ -177,9 +174,6 @@ export class OpenAiProvider implements IAiProvider {
             throw new Error('OpenAI API did not return a valid JSON object.');
         }
     }
-
-    // The following methods are placeholders to satisfy the IAiProvider interface.
-    // A full implementation would be required for these features.
 
     /** @inheritdoc */
     async generateContent(prompt: Prompt, systemInstruction?: string, temperature?: number): Promise<string> {

@@ -1,11 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { formatCodeStream } from '../../services/index.ts';
-import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
-import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
-import { useNotification } from '../../contexts/NotificationContext.tsx';
-import { CodeBracketSquareIcon } from '../icons.tsx';
-import { LoadingSpinner } from '../shared/index.tsx';
-import { MarkdownRenderer } from '../shared/index.tsx';
+import { formatCodeStream } from '@/services/index.ts';
+import { useGlobalState } from '@/contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '@/contexts/VaultModalContext.tsx';
+import { useNotification } from '@/contexts/NotificationContext.tsx';
+import { CodeBracketSquareIcon } from '@/components/icons.tsx';
+import { LoadingSpinner, MarkdownRenderer } from '@/components/shared/index.tsx';
 
 const exampleCode = `const MyComponent = (props) => {
   const {name, items}=props

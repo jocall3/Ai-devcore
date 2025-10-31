@@ -1,22 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { IAIEngineService, ICommand, IAiProvider } from '../../modules/ai-engine/i-ai-engine.service';
-import { useService } from '../../core/ioc/use-service.hook';
-import { SERVICE_IDENTIFIER } from '../../modules/service.registry';
+import { generateTerraformConfig } from '../../services/index.ts';
 import { CpuChipIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
-
-class GenerateTerraformConfigCommand implements ICommand<string> {
-    constructor(private cloud: 'aws' | 'gcp', private description: string, private context: string) {}
-
-    execute(provider: IAiProvider): Promise<string> {
-        const prompt = `You are an expert in Infrastructure as Code. Generate a Terraform configuration file for ${this.cloud}. The configuration should do the following: ${this.description}. Additional context: ${this.context}. Respond only with the HCL code inside a markdown block.`;
-        const systemInstruction = "You are a Terraform expert generating HCL code.";
-        return provider.generateContent(prompt, systemInstruction, 0.2);
-    }
-}
 
 export const TerraformGenerator: React.FC = () => {
     const [description, setDescription] = useState('An S3 bucket for static website hosting');
@@ -44,8 +32,7 @@ export const TerraformGenerator: React.FC = () => {
 
         const executeGeneration = async () => {
             const context = 'User might have existing VPCs. Check before creating new ones.';
-            const command = new GenerateTerraformConfigCommand(cloud, description, context);
-            const result = await aiEngineService.execute(command) as string; // Use the injected aiEngineService
+            const result = await generateTerraformConfig(cloud, description, context);
             setConfig(result);
         };
 

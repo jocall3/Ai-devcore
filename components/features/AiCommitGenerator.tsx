@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { generateCommitMessageStream } from '../../services/aiService.ts';
+import { streamContent } from '../../services/index.ts';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
@@ -103,7 +103,10 @@ export const AiCommitGenerator: React.FC<AiCommitGeneratorProps> = ({ diff: init
                 }
             }
 
-            const stream = generateCommitMessageStream(diffToAnalyze);
+            const prompt = `Generate a conventional commit message for the following diff:\n\n\`\`\`diff\n${diffToAnalyze}\n\`\`\``;
+            const systemInstruction = 'You are a commit message generator. Respond with only the commit message in the conventional commit format. Do not include any extra text, markdown formatting, or explanations.';
+            const stream = streamContent(prompt, systemInstruction);
+
             let fullResponse = '';
             for await (const chunk of stream) {
                 fullResponse += chunk;

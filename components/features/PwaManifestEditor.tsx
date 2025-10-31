@@ -70,7 +70,7 @@ export const PwaManifestEditor: React.FC = () => {
                 <div className="xl:col-span-1 flex flex-col">
                     <div className="flex justify-between items-center mb-2">
                          <label className="text-sm font-medium text-text-secondary">Generated manifest.json</label>
-                         <button onClick={() => downloadFile(generatedJson, 'manifest.json', 'application/json')} className="flex items-center gap-1 px-3 py-1 bg-gray-100 text-xs rounded-md hover:bg-gray-200">
+                         <button onClick={() => downloadFile(generatedJson, 'manifest.json', 'application/json')} className="flex items-center gap-1 px-3 py-1 bg-gray-100 text-xs rounded-md hover:bg-gray-200 dark:bg-slate-700 dark:hover:bg-slate-600">
                             <ArrowDownTrayIcon className="w-4 h-4"/> Download
                         </button>
                     </div>

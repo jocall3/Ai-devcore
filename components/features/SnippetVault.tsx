@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { LockClosedIcon, SparklesIcon, TrashIcon, ClipboardDocumentIcon, ArrowDownTrayIcon } from '../icons.tsx';
 import { useLocalStorage } from '../../hooks/useLocalStorage.ts';
-import { streamContent, generateJson } from '../../services/index.ts';
+import { enhanceSnippetStream, generateTagsForCode } from '../../services/aiService.ts';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { downloadFile } from '../../services/fileUtils.ts';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
@@ -82,17 +82,11 @@ export const SnippetVault: React.FC = () => {
         setIsEnhancing(true);
         try {
             await withVault(async () => {
-                const prompt = `Enhance the following code snippet. Improve its readability, performance, and adherence to best practices. Respond ONLY with the raw, updated code, without any markdown formatting, explanations, or code fences.
-
-Code:
----
-${activeSnippet.code}
----`;
-                const stream = streamContent(prompt, "You are an expert software engineer performing a code refactoring task.");
+                const stream = enhanceSnippetStream(activeSnippet.code);
                 let fullResponse = '';
                 for await (const chunk of stream) {
                     fullResponse += chunk;
-                    updateSnippet({ ...activeSnippet, code: fullResponse });
+                    updateSnippet({ ...activeSnippet, code: fullResponse.replace(/^```(?:\w+\n)?/, '').replace(/```$/, '') });
                 }
             });
         } catch (e) {
@@ -108,9 +102,7 @@ ${activeSnippet.code}
         setIsTagging(true);
         try {
             await withVault(async () => {
-                const prompt = `Generate a list of 3-5 relevant, one-word, lowercase tags for the following code snippet. Return a JSON array of strings. Examples: ["react", "typescript", "state-management"].\n\nCode:\n---\n${snippet.code}\n---`;
-                const schema = { type: 'array', items: { type: 'string' } };
-                const suggestedTags = await generateJson<string[]>(prompt, "You are a code analysis tool that generates tags.", schema);
+                const suggestedTags = await generateTagsForCode(snippet.code);
                 const newTags = [...new Set([...(snippet.tags || []), ...suggestedTags])];
                 updateSnippet({...snippet, tags: newTags});
                 addNotification('AI tags added!', 'success');

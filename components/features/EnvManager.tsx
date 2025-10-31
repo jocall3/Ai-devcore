@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { downloadEnvFile } from '../../services/fileUtils.ts';
+import { downloadEnvFile } from '../../services/index.ts';
 import { DocumentTextIcon, PlusIcon, TrashIcon, ArrowDownTrayIcon } from '../icons.tsx';
 
 interface EnvVar {

@@ -6,7 +6,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import * as vaultService from './vaultService.ts';
+import { isUnlocked, getDecryptedCredential } from './vaultService.ts';
 import { logError, logEvent } from './telemetryService.ts';
 import { Octokit } from '@octokit/rest';
 
@@ -21,7 +21,7 @@ export class VaultLockedError extends Error {
    * Creates an instance of VaultLockedError.
    * @param {string} message - The error message.
    * @example
-   * if (!vaultService.isUnlocked()) {
+   * if (!(await isUnlocked())) {
    *   throw new VaultLockedError("Vault must be unlocked.");
    * }
    */
@@ -65,7 +65,7 @@ let _githubClient: Octokit | null = null; // Use _ prefix for internal module-le
  * @throws {VaultLockedError} If the vault is locked or GitHub token is not found.
  */
 export async function getGithubClient(): Promise<Octokit> {
-  if (!vaultService.isUnlocked()) {
+  if (!(await isUnlocked())) {
     throw new VaultLockedError('Vault is locked. Unlock the vault to access GitHub credentials.');
   }
 
@@ -73,7 +73,7 @@ export async function getGithubClient(): Promise<Octokit> {
     return _githubClient;
   }
 
-  const githubToken = await vaultService.getDecryptedCredential('github_token');
+  const githubToken = await getDecryptedCredential('github_pat');
   if (!githubToken) {
     throw new VaultLockedError('GitHub token not found in vault. Please connect GitHub in the Workspace Connector Hub.');
   }
@@ -98,9 +98,9 @@ ACTION_REGISTRY.set('jira_create_ticket', {
     issueType: { type: 'string', required: true, default: 'Task' }
   }),
   execute: async (params) => {
-    const domain = await vaultService.getDecryptedCredential('jira_domain');
-    const token = await vaultService.getDecryptedCredential('jira_pat');
-    const email = await vaultService.getDecryptedCredential('jira_email');
+    const domain = await getDecryptedCredential('jira_domain');
+    const token = await getDecryptedCredential('jira_pat');
+    const email = await getDecryptedCredential('jira_email');
 
     if (!domain || !token || !email) {
         throw new Error("Jira credentials not found in vault. Please connect Jira in the Workspace Connector Hub.");
@@ -145,7 +145,7 @@ ACTION_REGISTRY.set('slack_post_message', {
     text: { type: 'string', required: true }
   }),
   execute: async (params) => {
-    const token = await vaultService.getDecryptedCredential('slack_bot_token');
+    const token = await getDecryptedCredential('slack_bot_token');
     if (!token) {
         throw new Error("Slack credentials not found in vault. Please connect Slack in the Workspace Connector Hub.");
     }
@@ -256,9 +256,7 @@ export async function executeWorkspaceAction(actionId: string, params: any): Pro
         throw new Error(`Action "${actionId}" not found.`);
     }
 
-    // FIX: Check if the action requires an unlocked vault before proceeding.
-    // This allows the UI to catch a specific 'VaultLockedError' and prompt the user.
-    if (action.requiresAuth && !vaultService.isUnlocked()) {
+    if (action.requiresAuth && !(await isUnlocked())) {
       logEvent('workspace_action_blocked', { actionId, reason: 'vault_locked' });
       throw new VaultLockedError('Vault is locked. Unlock the vault to execute this action.');
     }
@@ -272,4 +270,4 @@ export async function executeWorkspaceAction(actionId: string, params: any): Pro
         logError(error as Error, { context: 'executeWorkspaceAction', actionId });
         throw error;
     }
-}
+};

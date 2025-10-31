@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { streamContent } from '../../services/index.ts';
+import { migrateCodeStream } from '../../services/index.ts';
 import { ArrowPathIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
@@ -51,9 +51,7 @@ export const AiCodeMigrator: React.FC<{ inputCode?: string, fromLang?: string, t
             setError('');
             setOutputCode('');
             try {
-                const systemInstruction = `You are an expert code migration tool. Your task is to accurately translate the provided code snippet from ${from} to ${to}. Maintain the original logic and structure as much as possible, but adapt to the new language's or framework's conventions and best practices. Respond ONLY with the migrated code inside a single markdown code block. Do not add any explanations or introductory text.`;
-                const prompt = `Migrate the following code from ${from} to ${to}:\n\n\`\`\`${from.toLowerCase()}\n${code}\n\`\`\``;
-                const stream = streamContent(prompt, systemInstruction, 0.2);
+                const stream = migrateCodeStream(code, from, to);
                 let fullResponse = '';
                 for await (const chunk of stream) {
                     fullResponse += chunk;

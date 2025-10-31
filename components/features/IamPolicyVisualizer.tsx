@@ -1,7 +1,10 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { testIamPermissions } from '../../services/gcpService.ts';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { GcpIcon, SparklesIcon } from '../icons.tsx';
+import { logError } from '../../services/telemetryService.ts';
 
 type SimulationStatus = 'idle' | 'running' | 'completed' | 'error';
 type NodeStatus = 'neutral' | 'pending' | 'success' | 'fail' | 'partial';
@@ -29,6 +32,9 @@ const getResourceType = (resourceId: string): ResourceNode['type'] => {
 
 export const IamPolicyVisualizer: React.FC = () => {
     const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
     const [resources, setResources] = useState<ResourceNode[]>([]);
     const [newResource, setNewResource] = useState('//cloudresourcemanager.googleapis.com/projects/your-gcp-project-id');
     const [permissions, setPermissions] = useState('storage.objects.get\nstorage.objects.create');
@@ -53,47 +59,76 @@ export const IamPolicyVisualizer: React.FC = () => {
     const handleRunSimulation = useCallback(async () => {
         if (!state.user) {
             setError('You must be signed in to run a simulation.');
+            addNotification('You must be signed in to run a simulation.', 'error');
             return;
         }
         if (resources.length === 0 || permissionList.length === 0) {
             setError('Please add at least one resource and one permission.');
+            addNotification('Please add at least one resource and one permission.', 'info');
             return;
         }
 
-        setSimulationStatus('running');
-        setError('');
-        setSelectedNode(null);
-        setResources(r => r.map(res => ({ ...res, status: 'pending', results: [] })));
+        const runSimulation = async () => {
+            setSimulationStatus('running');
+            setError('');
+            setSelectedNode(null);
+            setResources(r => r.map(res => ({ ...res, status: 'pending', results: [] })));
 
-        const promises = resources.map(resource =>
-            testIamPermissions(resource.id, permissionList)
-                .then(result => ({ id: resource.id, success: true, data: result }))
-                .catch(err => ({ id: resource.id, success: false, error: err }))
-        );
+            const promises = resources.map(resource =>
+                testIamPermissions(resource.id, permissionList)
+                    .then(result => ({ id: resource.id, success: true, data: result }))
+                    .catch(err => {
+                        logError(err, { context: 'IAM Policy Visualizer', resource: resource.id });
+                        return { id: resource.id, success: false, error: err };
+                    })
+            );
 
-        const results = await Promise.allSettled(promises);
+            const results = await Promise.all(promises);
 
-        setResources(prevResources => prevResources.map(resource => {
-            const result: any = results.find((r: any) => r.value?.id === resource.id);
-            if (!result || !result.value.success) {
-                return { ...resource, status: 'fail' as NodeStatus };
+            setResources(prevResources => prevResources.map(resource => {
+                const result = results.find(r => r.id === resource.id);
+                if (!result || !result.success) {
+                    return { ...resource, status: 'fail' as NodeStatus };
+                }
+                
+                const grantedPermissions = result.data.permissions || [];
+                const permissionResults = permissionList.map(p => ({ permission: p, granted: grantedPermissions.includes(p) }));
+                const allGranted = permissionResults.every(r => r.granted);
+                const noneGranted = permissionResults.every(r => !r.granted);
+
+                let status: NodeStatus = 'partial';
+                if (allGranted) status = 'success';
+                if (noneGranted) status = 'fail';
+
+                return { ...resource, status, results: permissionResults };
+            }));
+
+            setSimulationStatus('completed');
+        };
+
+        try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required for this action.', 'error');
+                    return;
+                }
             }
-            
-            const grantedPermissions = result.value.data.permissions || [];
-            const permissionResults = permissionList.map(p => ({ permission: p, granted: grantedPermissions.includes(p) }));
-            const allGranted = permissionResults.every(r => r.granted);
-            const noneGranted = permissionResults.every(r => !r.granted);
-
-            let status: NodeStatus = 'partial';
-            if (allGranted) status = 'success';
-            if (noneGranted) status = 'fail';
-
-            return { ...resource, status, results: permissionResults };
-        }));
-
-        setSimulationStatus('completed');
-
-    }, [resources, permissionList, state.user]);
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked for this action.', 'info');
+                    return;
+                }
+            }
+            await runSimulation();
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            setError(errorMessage);
+            addNotification(errorMessage, 'error');
+            setSimulationStatus('error');
+        }
+    }, [resources, permissionList, state.user, vaultState, requestCreation, requestUnlock, addNotification]);
     
     const nodeColorClass: Record<NodeStatus, string> = {
         neutral: 'border-slate-600',

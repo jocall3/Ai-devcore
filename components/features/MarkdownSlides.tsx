@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { marked } from 'marked';
 import { PhotoIcon } from '../icons.tsx';
@@ -79,8 +78,8 @@ export const MarkdownSlides: React.FC = () => {
                     </div>
                     <div className="relative flex-grow flex flex-col justify-center items-center p-8 overflow-y-auto">
                         <div className="prose prose-lg max-w-none w-full" dangerouslySetInnerHTML={{ __html: slideHtml }} />
-                         <button onClick={goToPrev} disabled={currentSlide === 0} className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-gray-200/50 dark:bg-slate-700/50 rounded-full disabled:opacity-30 hover:bg-gray-300/50 dark:hover:bg-slate-600/50">◀</button>
-                         <button onClick={goToNext} disabled={currentSlide === slides.length - 1} className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-gray-200/50 dark:bg-slate-700/50 rounded-full disabled:opacity-30 hover:bg-gray-300/50 dark:hover:bg-slate-600/50">▶</button>
+                         <button onClick={goToPrev} disabled={currentSlide === 0} className="absolute left-4 top-1/2 -translate-y-1/2 p-2 bg-gray-200/50 dark:bg-slate-700/50 rounded-full disabled:opacity-30 hover:bg-gray-300/50 dark:hover:bg-slate-600/50">â—€</button>
+                         <button onClick={goToNext} disabled={currentSlide === slides.length - 1} className="absolute right-4 top-1/2 -translate-y-1/2 p-2 bg-gray-200/50 dark:bg-slate-700/50 rounded-full disabled:opacity-30 hover:bg-gray-300/50 dark:hover:bg-slate-600/50">â–¶</button>
                          <div className="absolute bottom-4 right-4 text-xs bg-black/50 px-2 py-1 rounded-md text-white">
                             {currentSlide + 1} / {slides.length}
                         </div>

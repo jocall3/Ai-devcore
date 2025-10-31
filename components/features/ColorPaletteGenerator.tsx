@@ -1,10 +1,13 @@
 
 import React, { useState, useCallback } from 'react';
 import { HexColorPicker } from 'react-colorful';
-import { generateColorPalette } from '../../services/aiService.ts';
-import { downloadFile } from '../../services/fileUtils.ts';
+import { generateColorPalette, downloadFile } from '../../services/index.ts';
 import { SparklesIcon, ArrowDownTrayIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
+import type { SemanticColorTheme } from '../../types.ts';
 
 // Define the expected structure for the AI-generated palette result
 interface ColorValue {
@@ -88,12 +91,34 @@ export const ColorPaletteGenerator: React.FC = () => {
         cardBg: '#F0F2F5', pillBg: '#CCD3E8', pillText: '#0047AB', buttonBg: '#0047AB', buttonText: '#FFFFFF'
     });
 
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
     const handleGenerate = useCallback(async () => {
         setIsLoading(true);
         setError('');
+
         try {
-            // Cast the result to the expected AIGeneratedPalette type
-            const result = await generateColorPalette(baseColor) as AIGeneratedPalette;
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
+            const result: SemanticColorTheme = await generateColorPalette(baseColor);
             const newPalette = [
                 result.palette.primary.value,
                 result.palette.secondary.value,
@@ -119,10 +144,11 @@ export const ColorPaletteGenerator: React.FC = () => {
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
             setError(`Failed to generate palette: ${errorMessage}`);
+            addNotification(`Failed to generate palette: ${errorMessage}`, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, [baseColor]);
+    }, [baseColor, vaultState, requestCreation, requestUnlock, addNotification]);
 
     const downloadColors = () => {
         const cssContent = `:root {\n${palette.map((c, i) => `  --color-palette-${i+1}: ${c};`).join('\n')}\n}`;
@@ -198,8 +224,8 @@ export const ColorPaletteGenerator: React.FC = () => {
                         ))
                     )}
                     <div className="flex gap-2 mt-2">
-                        <button onClick={downloadColors} className="flex-1 flex items-center justify-center gap-2 text-sm py-2 bg-gray-100 border border-border rounded-md hover:bg-gray-200"><ArrowDownTrayIcon className="w-4 h-4"/> Download Colors</button>
-                        <button onClick={downloadCard} className="flex-1 flex items-center justify-center gap-2 text-sm py-2 bg-gray-100 border border-border rounded-md hover:bg-gray-200"><ArrowDownTrayIcon className="w-4 h-4"/> Download Card</button>
+                        <button onClick={downloadColors} className="flex-1 flex items-center justify-center gap-2 text-sm py-2 bg-gray-100 dark:bg-slate-700 border border-border rounded-md hover:bg-gray-200 dark:hover:bg-slate-600"><ArrowDownTrayIcon className="w-4 h-4"/> Download Colors</button>
+                        <button onClick={downloadCard} className="flex-1 flex items-center justify-center gap-2 text-sm py-2 bg-gray-100 dark:bg-slate-700 border border-border rounded-md hover:bg-gray-200 dark:hover:bg-slate-600"><ArrowDownTrayIcon className="w-4 h-4"/> Download Card</button>
                     </div>
                 </div>
                 {!isLoading && <PreviewCard palette={palette} colors={previewColors} setColors={setPreviewColors} />}

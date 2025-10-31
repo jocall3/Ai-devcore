@@ -1,5 +1,3 @@
-
-
 import React, { useState, useMemo } from 'react';
 import { ChartBarIcon } from '../icons.tsx';
 
@@ -34,17 +32,17 @@ const exampleJson = `{
 
 
 const TreeNode: React.FC<{ node: CallNode, level: number, maxDuration: number }> = ({ node, level, maxDuration }) => {
-    const [isOpen, setIsOpen] = React.useState(true);
+    const [isOpen, setIsOpen] = useState(true);
     const hasChildren = node.children && node.children.length > 0;
 
     return (
         <div className="my-1">
             <div
-                className="flex items-center p-2 rounded-md hover:bg-gray-100"
+                className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-700"
                 style={{ paddingLeft: `${level * 20 + 8}px` }}
             >
                 {hasChildren && (
-                    <button onClick={() => setIsOpen(!isOpen)} className={`mr-2 text-text-secondary w-4 h-4 flex-shrink-0 transform transition-transform ${isOpen ? 'rotate-90' : ''}`}>
+                    <button onClick={() => setIsOpen(!isOpen)} className={`mr-2 text-text-secondary w-4 h-4 flex-shrink-0 flex items-center justify-center transform transition-transform ${isOpen ? 'rotate-90' : ''}`}>
                        ▶
                     </button>
                 )}
@@ -52,7 +50,7 @@ const TreeNode: React.FC<{ node: CallNode, level: number, maxDuration: number }>
                  <div className="flex-grow flex items-center justify-between gap-4">
                     <span className="truncate">{node.name}</span>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                         <div className="w-24 h-4 bg-gray-200 rounded-full overflow-hidden">
+                         <div className="w-24 h-4 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
                             <div className="h-4 bg-primary" style={{ width: `${(node.duration / maxDuration) * 100}%` }}/>
                          </div>
                         <span className="text-primary w-16 text-right">{node.duration.toFixed(0)}ms</span>
@@ -95,7 +93,7 @@ export const AsyncCallTreeViewer: React.FC = () => {
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">
             <header className="mb-6">
-                <h1 className="text-3xl flex items-center">
+                <h1 className="text-3xl font-bold flex items-center">
                     <ChartBarIcon />
                     <span className="ml-3">Async Call Tree Viewer</span>
                 </h1>

@@ -24,7 +24,7 @@ $font-size: 16px;
 
 const escapeRegExp = (string: string): string => {
     // $& means the whole matched string
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return string.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
 };
 
 const compileScss = (scss: string): string => {
@@ -52,7 +52,7 @@ const compileScss = (scss: string): string => {
         const processBlock = (block: string, parentSelector: string = ''): string => {
             let currentCss = '';
             let nestedCss = '';
-            const properties = [];
+            const properties: string[] = [];
             
             const regex = /((?:[\w-:.#&>+~*\s,]+|\([^)]*\))\s*\{[^{}]*\})|((?:[\w-]+\s*:[^;]+;))/g;
             const content = block.substring(block.indexOf('{') + 1, block.lastIndexOf('}'));

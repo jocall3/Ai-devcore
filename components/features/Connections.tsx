@@ -1,13 +1,20 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
-import * as vaultService from '../../services/vaultService.ts';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { validateToken } from '../../services/authService.ts';
-import { ACTION_REGISTRY, executeWorkspaceAction } from '../../services/workspaceConnectorService.ts';
 import { RectangleGroupIcon, GithubIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { signInWithGoogle } from '../../services/googleAuthService.ts';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { container } from '../../modules/service.registry.ts';
+import { TYPES } from '../../core/di/types.ts';
+import type { IWorkspaceConnectorService, IWorkspaceAction } from '../../modules/workspace-connectors/workspace-connectors.service.ts';
+import type { SecurityCoreService as ISecurityCoreService } from '../../modules/security-core/security-core.service.ts';
+
+// A temporary hook to resolve services from the container until a proper provider is set up.
+function useService<T>(identifier: symbol): T {
+    return useMemo(() => container.get<T>(identifier), [identifier]);
+}
 
 const ServiceConnectionCard: React.FC<{
     serviceName: string;
@@ -73,16 +80,29 @@ export const Connections: React.FC = () => {
     const { requestUnlock, requestCreation } = useVaultModal();
     const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({});
     const [connectionStatuses, setConnectionStatuses] = useState<Record<string, string>>({});
-    
-    // Manual action state
-    const [selectedActionId, setSelectedActionId] = useState<string>([...ACTION_REGISTRY.keys()][0]);
+
+    const securityCoreService = useService<ISecurityCoreService>(TYPES.SecurityCore);
+    const workspaceConnectorService = useService<IWorkspaceConnectorService>(TYPES.WorkspaceConnectorService);
+
+    const [actions, setActions] = useState<Map<string, IWorkspaceAction>>(new Map());
+    const [selectedActionId, setSelectedActionId] = useState<string>('');
     const [actionParams, setActionParams] = useState<Record<string, any>>({});
     const [isExecuting, setIsExecuting] = useState(false);
     const [actionResult, setActionResult] = useState<string>('');
 
+    useEffect(() => {
+        if (workspaceConnectorService) {
+            const registeredActions = workspaceConnectorService.getActions();
+            setActions(registeredActions);
+            if (registeredActions.size > 0 && !selectedActionId) {
+                setSelectedActionId([...registeredActions.keys()][0]);
+            }
+        }
+    }, [workspaceConnectorService, selectedActionId]);
+
     const services = useMemo(() => {
         const serviceMap = new Map();
-        ACTION_REGISTRY.forEach(action => {
+        actions.forEach(action => {
             if (!serviceMap.has(action.service)) {
                 serviceMap.set(action.service, {
                     name: action.service,
@@ -92,7 +112,7 @@ export const Connections: React.FC = () => {
             serviceMap.get(action.service).actions.push(action);
         });
         return Array.from(serviceMap.values());
-    }, []);
+    }, [actions]);
 
     const withVault = useCallback(async (callback: () => Promise<void>) => {
         if (!vaultState.isInitialized) {
@@ -117,11 +137,11 @@ export const Connections: React.FC = () => {
     }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
     const checkConnections = useCallback(async () => {
-        if (!user) return;
+        if (!user || !securityCoreService) return;
         
         const checkCred = async (credId: string, serviceName: string, successMessage: string) => {
             try {
-                const token = await vaultService.getDecryptedCredential(credId);
+                const token = await securityCoreService.getDecryptedCredential(credId);
                 setConnectionStatuses(s => ({ ...s, [serviceName]: token ? successMessage : 'Not Connected' }));
             } catch (error) {
                 console.error(`Could not retrieve credential for ${serviceName}:`, error);
@@ -134,7 +154,7 @@ export const Connections: React.FC = () => {
         await checkCred('jira_pat', 'Jira', 'Connected');
         await checkCred('slack_bot_token', 'Slack', 'Connected');
 
-    }, [user, githubUser]);
+    }, [user, githubUser, securityCoreService]);
 
     useEffect(() => {
         if(user){
@@ -149,12 +169,12 @@ export const Connections: React.FC = () => {
             setLoadingStates(s => ({ ...s, [serviceName]: true }));
             try {
                 for (const [key, value] of Object.entries(credentials)) {
-                    if (value) await vaultService.saveCredential(key, value);
+                    if (value) await securityCoreService.saveCredential(key, value);
                 }
                 if (serviceName === 'GitHub' && credentials.github_pat) {
                      const githubProfile = await validateToken(credentials.github_pat);
                      dispatch({ type: 'SET_GITHUB_USER', payload: githubProfile });
-                     await vaultService.saveCredential('github_user', JSON.stringify(githubProfile));
+                     await securityCoreService.saveCredential('github_user', JSON.stringify(githubProfile));
                 }
                 addNotification(`${serviceName} connected successfully!`, 'success');
                 await checkConnections();
@@ -171,11 +191,11 @@ export const Connections: React.FC = () => {
             setLoadingStates(s => ({ ...s, [serviceName]: true }));
             try {
                 for (const id of credIds) {
-                     await vaultService.saveCredential(id, ''); // Overwrite with empty string
+                     await securityCoreService.saveCredential(id, ''); // Overwrite with empty string
                 }
                  if (serviceName === 'GitHub') {
                      dispatch({ type: 'SET_GITHUB_USER', payload: null });
-                     await vaultService.saveCredential('github_user', '');
+                     await securityCoreService.saveCredential('github_user', '');
                 }
                 addNotification(`${serviceName} disconnected.`, 'info');
                 await checkConnections();
@@ -192,7 +212,7 @@ export const Connections: React.FC = () => {
             setIsExecuting(true);
             setActionResult('');
             try {
-                const result = await executeWorkspaceAction(selectedActionId, actionParams);
+                const result = await workspaceConnectorService.executeAction(selectedActionId, actionParams);
                 setActionResult(JSON.stringify(result, null, 2));
                 addNotification('Action executed successfully!', 'success');
             } catch(e) {
@@ -208,7 +228,7 @@ export const Connections: React.FC = () => {
         signInWithGoogle();
     };
 
-    const selectedAction = ACTION_REGISTRY.get(selectedActionId);
+    const selectedAction = actions.get(selectedActionId);
     const actionParameters = selectedAction ? selectedAction.getParameters() : {};
 
     if (!user) {
@@ -283,7 +303,7 @@ export const Connections: React.FC = () => {
                             <select value={selectedActionId} onChange={e => setSelectedActionId(e.target.value)} className="w-full mt-1 p-2 bg-background border rounded">
                                 {services.map(service => (
                                     <optgroup label={service.name} key={service.name}>
-                                        {service.actions.map((action: any) => (
+                                        {(service.actions as IWorkspaceAction[]).map((action) => (
                                             <option key={action.id} value={action.id}>{action.description}</option>
                                         ))}
                                     </optgroup>

@@ -1,12 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { generateAppFeatureComponent } from '../../services/aiService.ts';
-import { getAllCustomFeatures, saveCustomFeature, deleteCustomFeature } from '../../services/dbService.ts';
+import { 
+    generateAppFeatureComponent,
+    getAllCustomFeatures, 
+    saveCustomFeature, 
+    deleteCustomFeature 
+} from '../../services/index.ts';
 import type { CustomFeature } from '../../types.ts';
 import { CpuChipIcon, TrashIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { ALL_FEATURES } from './index.tsx';
 import { CustomFeatureRunner } from '../shared/CustomFeatureRunner.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 
 const ICON_MAP: Record<string, React.FC> = ALL_FEATURES.reduce((acc, feature) => {
     const iconType = (feature.icon as React.ReactElement)?.type;
@@ -25,6 +31,9 @@ export const FeatureForge: React.FC = () => {
     const [prompt, setPrompt] = useState('A tool to convert JSON to YAML');
     const [generatedFeature, setGeneratedFeature] = useState<Omit<CustomFeature, 'id'> | null>(null);
     const { addNotification } = useNotification();
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
 
     const fetchFeatures = useCallback(async () => {
         setIsLoading('list');
@@ -42,6 +51,23 @@ export const FeatureForge: React.FC = () => {
         setIsGenerating(true);
         setGeneratedFeature(null);
         try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsGenerating(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsGenerating(false);
+                    return;
+                }
+            }
+            
             const result = await generateAppFeatureComponent(prompt);
             setGeneratedFeature(result);
             addNotification('Feature code generated! Review and save.', 'info');

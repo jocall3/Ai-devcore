@@ -1,9 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { analyzeCodeForVulnerabilities } from '../../services/aiService';
-import { runStaticScan, SecurityIssue } from '../../services/security/staticAnalysisService.ts';
+import { analyzeCodeForVulnerabilities, runStaticScan, type SecurityIssue } from '../../services/index.ts';
 import type { SecurityVulnerability } from '../../types.ts';
 import { ShieldCheckIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const exampleCode = `function UserProfile({ user }) {
   // TODO: remove this temporary api key
@@ -24,31 +25,48 @@ export const SecurityScanner: React.FC = () => {
     const [aiIssues, setAiIssues] = useState<SecurityVulnerability[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const { requestUnlock } = useVaultModal();
+    const { addNotification } = useNotification();
 
-    const handleScan = useCallback(async () => {
+    const handleScan = useCallback(async (isRetry: boolean = false) => {
         if (!code.trim()) {
             setError('Please enter code to scan.');
             return;
         }
         setIsLoading(true);
         setError('');
-        setLocalIssues([]);
-        setAiIssues([]);
+        if (!isRetry) {
+            setLocalIssues([]);
+            setAiIssues([]);
+        }
+
         try {
-            // Run local scan first
+            // Run local scan first as it doesn't require authentication
             const staticIssues = runStaticScan(code);
             setLocalIssues(staticIssues);
             
-            // Then run AI scan
+            // Then run AI scan which requires vault access
             const geminiIssues = await analyzeCodeForVulnerabilities(code);
             setAiIssues(geminiIssues);
 
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'An error occurred during scanning.');
+            const errorMessage = err instanceof Error ? err.message : 'An error occurred during scanning.';
+            
+            if (errorMessage.includes('Vault is locked') || errorMessage.includes('API key not found')) {
+                addNotification('Vault is locked. Please unlock it to use AI features.', 'info');
+                const unlocked = await requestUnlock();
+                if (unlocked) {
+                    handleScan(true); // Retry the operation
+                    return; // Exit to avoid setting loading to false prematurely
+                }
+                setError("Vault must be unlocked for an AI scan.");
+            } else {
+                setError(`Failed to get analysis: ${errorMessage}`);
+            }
         } finally {
             setIsLoading(false);
         }
-    }, [code]);
+    }, [code, requestUnlock, addNotification]);
 
     const SeverityBadge: React.FC<{ severity: string }> = ({ severity }) => {
         const colors: Record<string, string> = {
@@ -71,7 +89,7 @@ export const SecurityScanner: React.FC = () => {
                 <div className="flex flex-col">
                     <label className="text-sm mb-2">Code to Scan</label>
                     <textarea value={code} onChange={e => setCode(e.target.value)} className="w-full flex-grow p-2 bg-surface border rounded font-mono text-xs" />
-                    <button onClick={handleScan} disabled={isLoading} className="btn-primary w-full mt-4 py-2 flex justify-center items-center gap-2">{isLoading ? <LoadingSpinner/> : 'Scan Code'}</button>
+                    <button onClick={() => handleScan()} disabled={isLoading} className="btn-primary w-full mt-4 py-2 flex justify-center items-center gap-2">{isLoading ? <LoadingSpinner/> : 'Scan Code'}</button>
                 </div>
                 <div className="flex flex-col bg-surface p-4 border rounded-lg">
                     <h3 className="text-lg font-bold mb-2">Scan Results</h3>

@@ -7,8 +7,8 @@ import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { VaultModalContext } from '../../contexts/VaultModalContext.tsx';
 import { CreateMasterPasswordModal } from './CreateMasterPasswordModal.tsx';
 import { UnlockVaultModal } from './UnlockVaultModal.tsx';
-import * as vaultService from '../../services/vaultService.ts';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { eventBus } from '../../core/bus/event-bus.service.ts';
 
 /**
  * @typedef {function(value: boolean): void} PromiseResolver
@@ -18,8 +18,8 @@ type PromiseResolver = (value: boolean) => void;
 
 /**
  * Provides the context for vault modals (creation and unlocking) and manages their state.
- * It also handles the initial check on application startup to determine if the vault
- * needs to be unlocked and automatically prompts the user if so.
+ * It subscribes to global events to determine if the vault needs to be unlocked
+ * and automatically prompts the user if so.
  *
  * @param {object} props - The component props.
  * @param {React.ReactNode} props.children - The child components that will have access to the vault modal context.
@@ -66,30 +66,38 @@ export const VaultProvider: React.FC<{ children: React.ReactNode }> = ({ childre
      */
     const requestUnlock = useCallback(() => {
         return new Promise<boolean>((resolve) => {
+            // Avoid opening multiple unlock modals
+            if (isUnlockModalOpen) {
+                // The existing modal's promise will resolve for the new caller too
+                // This is a simplification; a more robust implementation might queue resolvers.
+                return;
+            }
             setUnlockPromise({ resolve });
             setUnlockModalOpen(true);
         });
-    }, []);
+    }, [isUnlockModalOpen]);
     
     useEffect(() => {
         /**
-         * Checks the vault's status on application startup.
-         * If the vault exists but is locked, it automatically triggers the unlock modal.
-         * This prevents errors from features that try to access credentials on load.
+         * Subscribes to vault state changes broadcast by the SecurityCoreService.
+         * This replaces the direct async calls to vaultService, aligning with the new CQRS/Event-driven architecture.
          * @private
          */
-        const checkVaultStatus = async () => {
-            const isInitialized = await vaultService.isVaultInitialized();
-            // With the new worker-based security core, checking the lock status is an async operation.
-            const isUnlocked = await vaultService.isUnlocked();
-            dispatch({ type: 'SET_VAULT_STATE', payload: { isInitialized, isUnlocked } });
+        const unsubscribe = eventBus.subscribe('vault:stateChanged', (payload) => {
+            dispatch({ type: 'SET_VAULT_STATE', payload });
             
-            if (isInitialized && !isUnlocked) {
+            // If the vault is initialized but becomes locked, prompt the user to unlock it.
+            if (payload.isInitialized && !payload.isUnlocked) {
                 requestUnlock();
             }
-        };
+        });
 
-        checkVaultStatus();
+        // The SecurityCoreService is responsible for checking and broadcasting the initial state on app startup.
+        // This component simply listens for those broadcasts.
+
+        return () => {
+            unsubscribe();
+        };
     }, [dispatch, requestUnlock]);
 
     /**

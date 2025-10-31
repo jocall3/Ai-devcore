@@ -5,6 +5,8 @@ import { generatePipelineCode } from '../../services/index.ts';
 import type { Feature } from '../../types.ts';
 import { MapIcon, SparklesIcon, XMarkIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 interface Node {
     id: number;
@@ -25,7 +27,7 @@ const FeaturePaletteItem: React.FC<{ feature: Feature, onDragStart: (e: React.Dr
     <div
         draggable
         onDragStart={e => onDragStart(e, feature.id)}
-        className="p-3 rounded-md bg-gray-50 border border-border flex items-center gap-3 cursor-grab hover:bg-gray-100 transition-colors"
+        className="p-3 rounded-md bg-surface border border-border flex items-center gap-3 cursor-grab hover:bg-background transition-colors"
     >
         <div className="text-primary flex-shrink-0">{feature.icon}</div>
         <div>
@@ -67,11 +69,11 @@ const SVGGrid: React.FC = React.memo(() => (
     <svg width="100%" height="100%" className="absolute inset-0">
         <defs>
             <pattern id="smallGrid" width="10" height="10" patternUnits="userSpaceOnUse">
-                <path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(0, 0, 0, 0.05)" strokeWidth="0.5"/>
+                <path d="M 10 0 L 0 0 0 10" fill="none" className="stroke-border opacity-20 dark:opacity-10" strokeWidth="0.5"/>
             </pattern>
             <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
                 <rect width="50" height="50" fill="url(#smallGrid)"/>
-                <path d="M 50 0 L 0 0 0 50" fill="none" stroke="rgba(0, 0, 0, 0.1)" strokeWidth="1"/>
+                <path d="M 50 0 L 0 0 0 50" fill="none" className="stroke-border opacity-30 dark:opacity-20" strokeWidth="1"/>
             </pattern>
         </defs>
         <rect width="100%" height="100%" fill="url(#grid)" />
@@ -86,6 +88,8 @@ export const LogicFlowBuilder: React.FC = () => {
     const [generatedCode, setGeneratedCode] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const canvasRef = useRef<HTMLDivElement>(null);
+    const { requestUnlock } = useVaultModal();
+    const { addNotification } = useNotification();
     
     const handleGenerateCode = useCallback(async () => {
         setIsGenerating(true);
@@ -113,16 +117,39 @@ export const LogicFlowBuilder: React.FC = () => {
             return `Step ${index + 1}: Execute the '${featureInfo?.name}' tool. Description: ${featureInfo?.description}. Inputs: ${featureInfo?.inputs}.`;
         }).join('\n');
 
-        try {
+        const executeGeneration = async () => {
             const code = await generatePipelineCode(flowDescription);
             setGeneratedCode(code);
-        } catch (e) {
-            setGeneratedCode(`// Error generating code: ${e instanceof Error ? e.message : 'Unknown error'}`);
+            addNotification('Pipeline code generated!', 'success');
+        };
+
+        try {
+            await executeGeneration();
+        } catch (err) {
+            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+            if (errorMessage.includes('Vault is locked') || errorMessage.includes('API key not found')) {
+                addNotification('Vault is locked. Please unlock to use AI features.', 'info');
+                const unlocked = await requestUnlock();
+                if (unlocked) {
+                    try {
+                        await executeGeneration(); // Retry
+                    } catch (retryErr) {
+                        const retryMsg = retryErr instanceof Error ? retryErr.message : 'Unknown error on retry.';
+                        setGeneratedCode(`// Error generating code: ${retryMsg}`);
+                        addNotification(`Error: ${retryMsg}`, 'error');
+                    }
+                } else {
+                     setGeneratedCode(`// Generation cancelled: Vault must be unlocked.`);
+                }
+            } else {
+                setGeneratedCode(`// Error generating code: ${errorMessage}`);
+                addNotification(`Error: ${errorMessage}`, 'error');
+            }
         } finally {
             setIsGenerating(false);
         }
 
-    }, [nodes, links]);
+    }, [nodes, links, requestUnlock, addNotification]);
 
     const handleDragStart = (e: React.DragEvent, featureId: string) => {
         e.dataTransfer.setData('application/json', JSON.stringify({ featureId }));
@@ -228,7 +255,7 @@ export const LogicFlowBuilder: React.FC = () => {
                         return feature ? <NodeComponent key={node.id} node={node} feature={feature} onMouseDown={handleNodeMouseDown} onLinkStart={handleLinkStart} onLinkEnd={handleLinkEnd} /> : null;
                     })}
                 </main>
-                        </div>
+            </div>
 
             {(isGenerating || generatedCode) && (
                 <div

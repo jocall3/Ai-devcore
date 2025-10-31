@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { generatePrSummaryStructured, generateTechnicalSpecFromDiff } from '../../services/aiService';
-import { createDocument, insertText } from '../../services/workspaceService';
+import { generatePrSummaryStructured, generateTechnicalSpecFromDiff, createDocument, insertText } from '../../services';
 import type { StructuredPrSummary } from '../../types';
 import { AiPullRequestAssistantIcon, DocumentIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';

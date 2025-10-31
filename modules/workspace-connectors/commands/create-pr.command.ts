@@ -1,5 +1,5 @@
 /**
- * @file Implements the command for creating a GitHub pull request.
+ * @file Implements the command and handler for creating a GitHub pull request.
  * @author Elite AI Implementation Team
  * @license Apache-2.0
  */
@@ -7,25 +7,9 @@
 import { inject, injectable } from 'inversify';
 import 'reflect-metadata';
 import type { Octokit } from 'octokit';
-
-// Define SERVICE_IDENTIFIER locally to resolve the import error from '../../service.registry'.
-// This assumes that the actual identifiers used by the Inversify container will match these symbols.
-export const SERVICE_IDENTIFIER = {
-  WorkspaceConnectorService: Symbol.for('WorkspaceConnectorService'),
-  // If CreatePullRequestCommand itself were to be referenced via SERVICE_IDENTIFIER
-  // for binding or resolution within this file, it would be added here:
-  // CreatePullRequestCommand: Symbol.for('CreatePullRequestCommand'),
-};
-
-/**
- * @interface ICommand
- * @description A generic command interface for actions that take a payload and return a result.
- * @template TPayload - The type of the payload for the command.
- * @template TResult - The expected return type of the command.
- */
-interface ICommand<TPayload, TResult> {
-    execute(payload: TPayload): Promise<TResult>;
-}
+import { ICommand, ICommandHandler } from '../../../core/command-bus/command-bus.service';
+import { TYPES } from '../../../core/di/types';
+import type { IWorkspaceConnectorService } from '../workspace-connectors.service';
 
 /**
  * @interface IWorkspaceConnectorService
@@ -107,83 +91,72 @@ export type CreatePullRequestResult = {
 
 /**
  * @class CreatePullRequestCommand
- * @implements ICommand<CreatePullRequestPayload, CreatePullRequestResult>
- * @description A command encapsulating the logic to create a GitHub pull request.
- * It relies on the WorkspaceConnectorService to provide an authenticated GitHub client.
- *
- * @example
- * // Assuming 'container' is an InversifyJS container
- * const createPrCommand = container.get<CreatePullRequestCommand>(SERVICE_IDENTIFIER.CreatePullRequestCommand); // Assuming it's bound
- * try {
- *   const result = await createPrCommand.execute({
- *     owner: 'my-org',
- *     repo: 'my-repo',
- *     title: 'feat: Implement new feature',
- *     head: 'feature-branch',
- *     base: 'main',
- *     body: 'This PR implements the new feature as per ticket #123.'
- *   });
- *   console.log(`Successfully created PR #${result.number}: ${result.url}`);
- * } catch (error) {
- *   console.error('Failed to create PR:', error.message);
- * }
+ * @implements ICommand<CreatePullRequestPayload>
+ * @description A command DTO for creating a GitHub pull request.
+ */
+export class CreatePullRequestCommand implements ICommand<CreatePullRequestPayload> {
+    readonly type = 'github:createPullRequest';
+    constructor(public readonly payload: CreatePullRequestPayload) {}
+}
+
+/**
+ * @class CreatePullRequestCommandHandler
+ * @implements ICommandHandler<CreatePullRequestCommand, CreatePullRequestResult>
+ * @description The handler for CreatePullRequestCommand. It is registered with the CommandBus
+ * and is responsible for the business logic of creating a GitHub pull request.
  */
 @injectable()
-export class CreatePullRequestCommand implements ICommand<CreatePullRequestPayload, CreatePullRequestResult> {
+export class CreatePullRequestCommandHandler implements ICommandHandler<CreatePullRequestCommand, CreatePullRequestResult> {
+    readonly commandType = 'github:createPullRequest';
 
-  /**
-   * @private
-   * @readonly
-   * @type {IWorkspaceConnectorService}
-   */
-  private readonly workspaceConnectorService: IWorkspaceConnectorService;
+    private readonly workspaceConnectorService: IWorkspaceConnectorService;
 
-  /**
-   * @constructor
-   * @param {IWorkspaceConnectorService} workspaceConnectorService - The injected workspace connector service,
-   * which provides access to authenticated clients for various services.
-   */
-  public constructor(
-    @inject(SERVICE_IDENTIFIER.WorkspaceConnectorService) workspaceConnectorService: IWorkspaceConnectorService
-  ) {
-    this.workspaceConnectorService = workspaceConnectorService;
-  }
-
-  /**
-   * Executes the command to create a new pull request on GitHub.
-   *
-   * @param {CreatePullRequestPayload} payload - The data required to create the pull request.
-   * @returns {Promise<CreatePullRequestResult>} A promise that resolves with the URL and number of the created PR.
-   * @throws {Error} Throws an error if the GitHub client cannot be initialized (e.g., missing credentials, locked vault)
-   * or if the GitHub API call fails.
-   */
-  public async execute(payload: CreatePullRequestPayload): Promise<CreatePullRequestResult> {
-    const octokit: Octokit | null = await this.workspaceConnectorService.getGithubClient();
-
-    if (!octokit) {
-      throw new Error('GitHub client is not available. Please ensure your GitHub account is connected and the vault is unlocked.');
+    /**
+     * @constructor
+     * @param {IWorkspaceConnectorService} workspaceConnectorService - The injected workspace connector service,
+     * which provides access to authenticated clients for various services.
+     */
+    public constructor(
+        @inject(TYPES.WorkspaceConnectorService) workspaceConnectorService: IWorkspaceConnectorService
+    ) {
+        this.workspaceConnectorService = workspaceConnectorService;
     }
 
-    const { owner, repo, title, head, base, body } = payload;
+    /**
+     * Executes the command to create a new pull request on GitHub.
+     *
+     * @param {CreatePullRequestCommand} command - The command containing the data required to create the pull request.
+     * @returns {Promise<CreatePullRequestResult>} A promise that resolves with the URL and number of the created PR.
+     * @throws {Error} Throws an error if the GitHub client cannot be initialized (e.g., missing credentials, locked vault)
+     * or if the GitHub API call fails.
+     */
+    public async execute(command: CreatePullRequestCommand): Promise<CreatePullRequestResult> {
+        const octokit: Octokit | null = await this.workspaceConnectorService.getGithubClient();
 
-    const response = await octokit.pulls.create({
-      owner,
-      repo,
-      title,
-      head,
-      base,
-      body,
-    });
+        if (!octokit) {
+            throw new Error('GitHub client is not available. Please ensure your GitHub account is connected and the vault is unlocked.');
+        }
 
-    if (response.status < 200 || response.status >= 300) {
-        // @ts-ignore - 'message' may not exist on data for all statuses, but it's a common pattern
-        const errorMessage = response.data?.message || 'An unknown GitHub API error occurred.';
-        throw new Error(`GitHub API failed with status ${response.status}: ${errorMessage}`);
+        const { owner, repo, title, head, base, body } = command.payload;
+
+        const response = await octokit.pulls.create({
+            owner,
+            repo,
+            title,
+            head,
+            base,
+            body,
+        });
+
+        if (response.status < 200 || response.status >= 300) {
+            // @ts-ignore - 'message' may not exist on data for all statuses, but it's a common pattern
+            const errorMessage = response.data?.message || 'An unknown GitHub API error occurred.';
+            throw new Error(`GitHub API failed with status ${response.status}: ${errorMessage}`);
+        }
+
+        return {
+            url: response.data.html_url,
+            number: response.data.number,
+        };
     }
-
-    return {
-      url: response.data.html_url,
-      number: response.data.number,
-    };
-  }
 }

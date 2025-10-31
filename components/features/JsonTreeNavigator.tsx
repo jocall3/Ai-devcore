@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { FileCodeIcon } from '../icons.tsx';
 
 interface JsonNodeProps {
@@ -29,8 +29,8 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, nodeKey, isRoot = false }) =>
 
     return (
         <div className={`ml-4 ${!isRoot ? 'pl-4 border-l border-border' : ''}`}>
-            <button onClick={toggleOpen} className="flex items-center cursor-pointer hover:bg-gray-100 rounded px-1">
-                <span className={`transform transition-transform ${isOpen ? 'rotate-90' : 'rotate-0'}`}>▶</span>
+            <button onClick={toggleOpen} className="flex items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-800 rounded px-1 py-0.5">
+                <span className={`transform transition-transform ${isOpen ? 'rotate-90' : ''}`}>▶</span>
                 <span className="ml-1 text-purple-700">{nodeKey}:</span>
                 <span className="ml-2 text-text-secondary">{bracket[0]}</span>
                 {!isOpen && <span className="text-text-secondary">...{bracket[1]}</span>}
@@ -50,29 +50,21 @@ const JsonNode: React.FC<JsonNodeProps> = ({ data, nodeKey, isRoot = false }) =>
 export const JsonTreeNavigator: React.FC<{ initialData?: object }> = ({ initialData }) => {
     const defaultJson = '{\n  "id": "devcore-001",\n  "active": true,\n  "features": [\n    "ai-explainer",\n    "api-tester"\n  ],\n  "config": {\n    "theme": "dark",\n    "version": 1\n  }\n}';
     const [jsonInput, setJsonInput] = useState(initialData ? JSON.stringify(initialData, null, 2) : defaultJson);
-    const [parsedData, setParsedData] = useState<any>(() => {
-        try {
-            return JSON.parse(jsonInput);
-        } catch {
-            return null;
+    
+    const { parsedData, error } = useMemo(() => {
+        if (!jsonInput.trim()) {
+            return { parsedData: null, error: null };
         }
-    });
-    const [error, setError] = useState('');
-
-    const parseJson = (input: string) => {
         try {
-            const parsed = JSON.parse(input);
-            setParsedData(parsed);
-            setError('');
+            const parsed = JSON.parse(jsonInput);
+            return { parsedData: parsed, error: null };
         } catch (e) {
-            if (e instanceof Error) setError(e.message);
-            setParsedData(null);
+            return { parsedData: null, error: e instanceof Error ? e.message : 'Invalid JSON' };
         }
-    };
+    }, [jsonInput]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
         setJsonInput(e.target.value);
-        parseJson(e.target.value);
     }
     
     return (
@@ -98,7 +90,7 @@ export const JsonTreeNavigator: React.FC<{ initialData?: object }> = ({ initialD
                  <div className="flex flex-col flex-grow min-h-0">
                     <label className="text-sm font-medium text-text-secondary mb-2">Tree View</label>
                     <div className="flex-grow p-4 bg-surface border border-border rounded-md overflow-y-auto font-mono text-sm">
-                        {parsedData ? <JsonNode data={parsedData} nodeKey="root" isRoot /> : <div className="text-text-secondary">Enter valid JSON to view</div>}
+                        {parsedData ? <JsonNode data={parsedData} nodeKey="root" isRoot /> : <div className="text-text-secondary">{error ? `Error: ${error}` : 'Enter valid JSON to view'}</div>}
                     </div>
                 </div>
             </div>

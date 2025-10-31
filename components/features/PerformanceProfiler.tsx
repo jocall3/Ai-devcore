@@ -1,9 +1,45 @@
-import React, { useState } from 'react';
-import { analyzePerformanceTrace } from '../../services/aiService.ts';
+import React, { useState, useCallback } from 'react';
+
+// AI Engine and Command imports based on the new architecture
+// Assuming these paths are correct as per the ongoing refactor, despite missing source files in context.
+import { aiEngineServiceInstance as aiEngineService } from '../../modules/ai-engine/ai-engine.service';
+import { ICommand } from '../../modules/ai-engine/commands/i-command.interface';
+import { IAIEngineProvider } from '../../modules/ai-engine/providers/i-ai-engine-provider.interface';
+
+// Local utilities and services (not part of the CQRS refactor for AI calls)
 import { startTracing, stopTracing, TraceEntry } from '../../services/profiling/performanceService.ts';
 import { parseViteStats, BundleStatsNode } from '../../services/profiling/bundleAnalyzer.ts';
+
+// UI components
 import { ChartBarIcon, SparklesIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
+
+// Hooks for global state and notifications
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
+
+/**
+ * Command for analyzing performance traces using the AI engine.
+ * This encapsulates the AI logic, decoupling it from the UI component.
+ */
+class AnalyzePerformanceTraceCommand implements ICommand<string> {
+    constructor(private dataToAnalyze: TraceEntry[] | BundleStatsNode | null) {}
+
+    /**
+     * Executes the command using the provided AI provider.
+     * @param provider An instance of a class that implements IAIEngineProvider.
+     * @returns A promise that resolves with the AI's analysis in markdown format.
+     */
+    public async execute(provider: IAIEngineProvider): Promise<string> {
+        if (!this.dataToAnalyze || (Array.isArray(this.dataToAnalyze) && this.dataToAnalyze.length === 0)) {
+            return Promise.resolve("No data available to analyze.");
+        }
+        const prompt = `Analyze this performance data and provide optimization suggestions.\n\nData:\n${JSON.stringify(this.dataToAnalyze, null, 2)}`;
+        const systemInstruction = `You are a web performance expert. Provide actionable advice in markdown format.`;
+        return provider.generateContent(prompt, systemInstruction, 0.5);
+    }
+}
 
 const FlameChart: React.FC<{ trace: TraceEntry[] }> = ({ trace }) => {
     if (trace.length === 0) return <p className="text-text-secondary">No trace data collected.</p>;
@@ -29,6 +65,11 @@ export const PerformanceProfiler: React.FC = () => {
     const [isLoadingAi, setIsLoadingAi] = useState(false);
     const [aiAnalysis, setAiAnalysis] = useState('');
 
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
     const handleTraceToggle = () => {
         if (isTracing) {
             const collectedTrace = stopTracing();
@@ -45,27 +86,45 @@ export const PerformanceProfiler: React.FC = () => {
         try {
             setBundleTree(parseViteStats(bundleStats));
         } catch (e) {
-            alert(e instanceof Error ? e.message : 'Parsing failed.');
+            addNotification(e instanceof Error ? e.message : 'Parsing failed.', 'error');
         }
     };
     
-    const handleAiAnalysis = async () => {
+    const handleAiAnalysis = useCallback(async () => {
         const dataToAnalyze = activeTab === 'runtime' ? trace : bundleTree;
         if (!dataToAnalyze || (Array.isArray(dataToAnalyze) && dataToAnalyze.length === 0)) {
-            alert('No data to analyze.');
+            addNotification('No data to analyze.', 'info');
             return;
         }
         setIsLoadingAi(true);
         setAiAnalysis('');
+
         try {
-            const analysis = await analyzePerformanceTrace(dataToAnalyze);
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    throw new Error('Vault setup is required for AI features.');
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    throw new Error('Vault must be unlocked for AI features.');
+                }
+            }
+
+            const command = new AnalyzePerformanceTraceCommand(dataToAnalyze);
+            const analysis = await aiEngineService.execute<string>(command);
             setAiAnalysis(analysis);
+
         } catch (e) {
-            setAiAnalysis('Error getting analysis from AI.');
+            const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
+            setAiAnalysis(`Error getting analysis from AI: ${errorMessage}`);
+            addNotification(errorMessage, 'error');
         } finally {
             setIsLoadingAi(false);
         }
-    };
+    }, [activeTab, trace, bundleTree, vaultState, requestCreation, requestUnlock, addNotification]);
 
     return (
         <div className="h-full flex flex-col p-4 sm:p-6 lg:p-8 text-text-primary">

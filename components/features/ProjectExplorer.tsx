@@ -2,10 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
-import { initializeOctokit } from '../../services/authService.ts';
-import { getDecryptedCredential } from '../../services/vaultService.ts';
-import { getRepos, getRepoTree, getFileContent, commitFiles } from '../../services/githubService.ts';
-import { generateCommitMessageStream } from '../../services/aiService.ts';
+import { executeWorkspaceAction, generateCommitMessageStream } from '../../services/index.ts';
 import type { Repo, FileNode } from '../../types.ts';
 import { FolderIcon, DocumentIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
@@ -33,7 +30,7 @@ const FileTree: React.FC<{ node: FileNode, onFileSelect: (path: string, name: st
                 className="flex items-center space-x-2 py-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-700 rounded"
                 onClick={() => setIsOpen(!isOpen)}
             >
-                <div className={`transform transition-transform ${isOpen ? 'rotate-90' : ''}`}>▶</div>
+                <div className={`transform transition-transform ${isOpen ? 'rotate-90' : ''}`}>â–¶</div>
                 <FolderIcon />
                 <span className="font-semibold">{node.name}</span>
             </div>
@@ -56,100 +53,83 @@ export const ProjectExplorer: React.FC = () => {
     const [error, setError] = useState('');
     const [activeFile, setActiveFile] = useState<{ path: string; name: string; originalContent: string; editedContent: string} | null>(null);
     
-    const getApiClient = useCallback(async () => {
-        if (!user) {
-            throw new Error("You must be logged in to use the Project Explorer.");
-        }
-
-        if (!vaultState.isInitialized) {
-            const created = await requestCreation();
-            if (!created) {
-                throw new Error("Vault setup is required to access GitHub.");
+    const withGitHubApi = useCallback(async <T,>(
+        apiCall: () => Promise<T>,
+        loadingState: 'repos' | 'tree' | 'file' | 'commit'
+    ): Promise<T | undefined> => {
+        setIsLoading(loadingState);
+        setError('');
+        try {
+            if (!user || !githubUser) {
+                throw new Error("Please connect to GitHub first via the Connections page.");
             }
-        }
-        if (!vaultState.isUnlocked) {
-            const unlocked = await requestUnlock();
-            if (!unlocked) {
-                throw new Error("Vault must be unlocked to access GitHub.");
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) throw new Error("Vault setup is required to access GitHub.");
             }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) throw new Error("Vault must be unlocked to access GitHub.");
+            }
+            return await apiCall();
+        } catch (err) {
+            const message = err instanceof Error ? err.message : 'An unknown error occurred';
+            setError(message);
+        } finally {
+            setIsLoading(null);
         }
-        
-        const token = await getDecryptedCredential('github_pat');
-        if (!token) {
-            throw new Error("GitHub token not found. Please add it on the Connections page.");
-        }
-        return initializeOctokit(token);
-    }, [user, vaultState, requestUnlock, requestCreation]);
+        return undefined;
+    }, [user, githubUser, vaultState, requestCreation, requestUnlock]);
 
 
     useEffect(() => {
         const loadRepos = async () => {
             if (user && githubUser) {
-                setIsLoading('repos');
-                setError('');
-                try {
-                    const octokit = await getApiClient();
-                    const userRepos = await getRepos(octokit);
-                    setRepos(userRepos);
-                } catch (err) {
-                    setError(err instanceof Error ? err.message : 'Failed to load repositories');
-                } finally {
-                    setIsLoading(null);
+                const result = await withGitHubApi(
+                    () => executeWorkspaceAction('github_get_repos', {}),
+                    'repos'
+                );
+                if (result) {
+                    setRepos(result as Repo[]);
                 }
             } else {
                 setRepos([]);
             }
         };
         loadRepos();
-    }, [user, githubUser, getApiClient]);
+    }, [user, githubUser, withGitHubApi]);
 
     useEffect(() => {
         const loadTree = async () => {
              if (selectedRepo && user && githubUser) {
-                setIsLoading('tree');
-                setError('');
                 setActiveFile(null);
-                try {
-                    const octokit = await getApiClient();
-                    const tree = await getRepoTree(octokit, selectedRepo.owner, selectedRepo.repo);
-                    dispatch({ type: 'LOAD_PROJECT_FILES', payload: tree });
-                } catch (err) {
-                     setError(err instanceof Error ? err.message : 'Failed to load repository tree');
-                } finally {
-                    setIsLoading(null);
+                const result = await withGitHubApi(
+                    () => executeWorkspaceAction('github_get_repo_tree', { owner: selectedRepo.owner, repo: selectedRepo.repo }),
+                    'tree'
+                );
+                if (result) {
+                    dispatch({ type: 'LOAD_PROJECT_FILES', payload: result as FileNode });
                 }
             }
         };
         loadTree();
-    }, [selectedRepo, user, githubUser, dispatch, getApiClient]);
+    }, [selectedRepo, user, githubUser, dispatch, withGitHubApi]);
 
     const handleFileSelect = async (path: string, name: string) => {
         if (!selectedRepo) return;
-        setIsLoading('file');
-        try {
-            const octokit = await getApiClient();
-            const content = await getFileContent(octokit, selectedRepo.owner, selectedRepo.repo, path);
+        const content = await withGitHubApi(
+            () => executeWorkspaceAction('github_get_file_content', { owner: selectedRepo.owner, repo: selectedRepo.repo, path }),
+            'file'
+        );
+        if (typeof content === 'string') {
             setActiveFile({ path, name, originalContent: content, editedContent: content });
-        } catch (err) {
-            setError((err as Error).message);
-        } finally {
-            setIsLoading(null);
         }
     };
 
     const handleCommit = async () => {
         if (!activeFile || !selectedRepo || activeFile.originalContent === activeFile.editedContent) return;
-
-        setIsLoading('commit');
-        setError('');
-        try {
-            if (!vaultState.isUnlocked) {
-                const unlocked = await requestUnlock();
-                if (!unlocked) {
-                    throw new Error("Vault must be unlocked to generate a commit message.");
-                }
-            }
-
+        
+        const result = await withGitHubApi(async () => {
             const diff = Diff.createPatch(activeFile.path, activeFile.originalContent, activeFile.editedContent);
             
             const stream = generateCommitMessageStream(diff);
@@ -158,28 +138,22 @@ export const ProjectExplorer: React.FC = () => {
             
             const finalMessage = window.prompt("Confirm or edit commit message:", commitMessage);
             if (!finalMessage) {
-                setIsLoading(null);
-                return;
+                return { committed: false };
             }
 
-            const octokit = await getApiClient();
-            await commitFiles(
-                octokit,
-                selectedRepo.owner,
-                selectedRepo.repo,
-                [{ path: activeFile.path, content: activeFile.editedContent }],
-                finalMessage
-            );
-            
+            const filesToCommit = [{ path: activeFile.path, content: activeFile.editedContent }];
+            await executeWorkspaceAction('github_commit_files', {
+                owner: selectedRepo.owner,
+                repo: selectedRepo.repo,
+                message: finalMessage,
+                files: JSON.stringify(filesToCommit)
+            });
+            return { committed: true };
+        }, 'commit');
+
+        if (result?.committed) {
             addNotification(`Successfully committed to ${selectedRepo.repo}`, 'success');
             setActiveFile(prev => prev ? { ...prev, originalContent: prev.editedContent } : null);
-
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'Failed to commit changes';
-            setError(message);
-            addNotification(message, 'error');
-        } finally {
-            setIsLoading(null);
         }
     };
     

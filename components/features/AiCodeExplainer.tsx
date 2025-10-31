@@ -6,7 +6,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import mermaid from 'mermaid';
-import { generateJson, generateContent } from '../../services/index.ts';
+import { explainCodeStructured, generateMermaidJs } from '../../services/index.ts';
 import type { StructuredExplanation } from '../../types.ts';
 import { CpuChipIcon } from '../icons.tsx';
 import { MarkdownRenderer, LoadingSpinner } from '../shared/index.tsx';
@@ -111,59 +111,6 @@ export const AiCodeExplainer: React.FC<AiCodeExplainerProps> = ({ initialCode })
             setMermaidCode('');
             setActiveTab('summary');
         }
-
-        const explainCodeStructured = async (code: string): Promise<StructuredExplanation> => {
-            const schema = {
-                type: "OBJECT",
-                properties: {
-                  summary: { type: "STRING", description: "A high-level summary of what the code does, including its purpose and overall approach." },
-                  lineByLine: {
-                    type: "ARRAY",
-                    description: "A detailed, line-by-line or block-by-block breakdown of the code.",
-                    items: {
-                      type: "OBJECT",
-                      properties: {
-                        lines: { type: "STRING", description: "The line number or range (e.g., '1-5')." },
-                        explanation: { type: "STRING", description: "The explanation for that specific line or block." }
-                      },
-                      required: ["lines", "explanation"]
-                    }
-                  },
-                  complexity: {
-                    type: "OBJECT",
-                    description: "Big O notation for time and space complexity.",
-                    properties: {
-                      time: { type: "STRING", description: "The time complexity (e.g., 'O(n^2)')." },
-                      space: { type: "STRING", description: "The space complexity (e.g., 'O(1)')." }
-                    },
-                    required: ["time", "space"]
-                  },
-                  suggestions: {
-                    type: "ARRAY",
-                    description: "A list of suggestions for improvement, such as refactoring, performance optimizations, or best practices.",
-                    items: { type: "STRING" }
-                  }
-                },
-                required: ["summary", "lineByLine", "complexity", "suggestions"]
-            };
-        
-            const prompt = `Analyze this code and provide a structured explanation according to the provided JSON schema:\n\n\`\`\`\n${code}\n\`\`\``;
-            const systemInstruction = "You are an expert software engineer providing a structured analysis of a code snippet. You must respond with a valid JSON object that adheres to the provided schema.";
-        
-            return generateJson<StructuredExplanation>(prompt, systemInstruction, schema);
-        };
-        
-        const generateMermaidJs = (code: string): Promise<string> => {
-            const prompt = `Based on the following code, generate a Mermaid.js flowchart diagram that visually represents its logic. Only output the Mermaid code inside a \`\`\`mermaid block. Do not include any other text or explanation.
-            
-            Code:
-            \`\`\`
-            ${code}
-            \`\`\`
-            `;
-            const systemInstruction = "You are a code analysis tool that generates Mermaid.js diagrams.";
-            return generateContent(prompt, systemInstruction);
-        };
         
         try {
             const [explanationResult, mermaidResult] = await Promise.all([

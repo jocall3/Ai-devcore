@@ -1,5 +1,5 @@
-import { ensureGapiClient } from './googleApiService.ts';
-import { logError } from './telemetryService.ts';
+import { ensureGapiClient } from '@/services/googleApiService.ts';
+import { logError } from '@/services/telemetryService.ts';
 
 declare var gapi: any;
 

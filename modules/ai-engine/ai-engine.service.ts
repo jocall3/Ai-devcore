@@ -1,6 +1,6 @@
 
 /**
- * @fileoverview Defines the AIEngine, the primary entry point for all AI-related
+ * @fileoverview Defines the AIEngineService, the primary entry point for all AI-related
  * operations. It acts as a facade, delegating computationally intensive tasks to a
  * worker-based ComputationService, adhering to the modular monolith architecture.
  * @version 2.0.0
@@ -11,12 +11,11 @@ import { injectable, inject } from 'inversify';
 import 'reflect-metadata';
 import { TYPES } from '../../core/di/types';
 import type { IComputationService } from '../../core/computation/computation.service';
-import type { GeneratedFile, StructuredPrSummary, StructuredExplanation, SemanticColorTheme, SecurityVulnerability, CodeSmell, CustomFeature } from '../../types';
+import type { GeneratedFile, StructuredPrSummary, StructuredExplanation, SemanticColorTheme, SecurityVulnerability, CodeSmell, CustomFeature, CommandResponse } from '../../types';
 import type { FunctionDeclaration } from '@google/genai';
 
-// This interface is missing from its own file. Defining it here for type safety.
-// In a full refactor, this would move to './i-ai-engine.service.ts'.
-export interface IAIEngine {
+// In a full refactor, this would move to its own file like 'i-ai-engine.service.ts'.
+export interface IAIEngineService {
   streamContent(prompt: string | { parts: any[] }, systemInstruction: string, temperature?: number): Promise<any>;
   generateContent(prompt: string, systemInstruction: string, temperature?: number): Promise<string>;
   generateJson<T>(prompt: any, systemInstruction: string, schema: any, temperature?: number): Promise<T>;
@@ -39,7 +38,6 @@ export interface IAIEngine {
   analyzeConcurrencyStream(code: string): Promise<any>;
   debugErrorStream(error: Error): Promise<any>;
   generateChangelogFromLogStream(log: string): Promise<any>;
-  // Updated signature for generateIamPolicyStream
   generateIamPolicyStream(resource: string, actions: string[], context: string): Promise<any>;
   generateRegExStream(prompt: string): Promise<any>;
   formatCodeStream(code: string): Promise<any>;
@@ -50,18 +48,11 @@ export interface IAIEngine {
   reviewCodeStream(code: string, systemInstruction?: string): Promise<any>;
   enhanceSnippetStream(snippet: string): Promise<any>;
   summarizeNotesStream(notes: string): Promise<any>;
-  // New method for Dockerfile generation
   generateDockerfile(framework: string): Promise<string>;
 }
 
-// This type is missing from the global types.ts. Defining it here for local correctness.
-export interface CommandResponse {
-    text: string;
-    functionCalls?: { name: string; args: any; }[];
-}
-
 @injectable()
-export class AIEngine implements IAIEngine {
+export class AIEngineService implements IAIEngineService {
   private readonly computationService: IComputationService;
 
   public constructor(
@@ -161,7 +152,6 @@ export class AIEngine implements IAIEngine {
     return this.computationService.execute('generateChangelogFromLogStream', log);
   }
 
-  // Updated implementation for generateIamPolicyStream
   public generateIamPolicyStream(resource: string, actions: string[], context: string): Promise<any> {
     return this.computationService.execute('generateIamPolicyStream', resource, actions, context);
   }
@@ -202,7 +192,6 @@ export class AIEngine implements IAIEngine {
     return this.computationService.execute('summarizeNotesStream', notes);
   }
 
-  // New method implementation for generateDockerfile
   public generateDockerfile(framework: string): Promise<string> {
     return this.computationService.execute('generateDockerfile', framework);
   }

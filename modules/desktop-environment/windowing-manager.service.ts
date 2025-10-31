@@ -1,4 +1,4 @@
-```typescript
+
 /**
  * @file Defines the WindowingManager service responsible for window state management.
  * @license SPDX-License-Identifier: Apache-2.0
@@ -10,7 +10,7 @@ import {
   type WindowContext,
   type WindowPosition
 } from './window.state-machine';
-import { IEventBus } from '../../core/bus/event-bus.service'; // Import the actual IEventBus
+import type { IEventBus } from '../../core/bus/event-bus.service';
 
 // --- Type Definitions ---
 
@@ -43,6 +43,17 @@ export interface WindowPublicState extends WindowContext {
   stateValue: WindowSnapshot['value'];
   isActive: boolean;
 }
+
+// Augment the central EventBus map with events specific to this module.
+// This ensures type safety when publishing events without modifying the core EventBus file.
+declare module '../../core/bus/event-bus.service' {
+  interface AppEventMap {
+    'window:opened': { windowId: string; featureId: string };
+    'window:minimized': { windowId: string };
+    'window:state_changed': WindowPublicState[];
+  }
+}
+
 
 const Z_INDEX_BASE = 10;
 
@@ -262,4 +273,3 @@ export class WindowingManagerService {
     return undefined;
   }
 }
-```

@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { generateImage, generateImageFromImageAndText } from '../../services/index.ts';
-import { fileToBase64, blobToDataURL } from '../../services/fileUtils.ts';
+import { generateImage, generateImageFromImageAndText, fileToBase64, blobToDataURL } from '../../services/index.ts';
 import { ImageGeneratorIcon, SparklesIcon, ArrowDownTrayIcon, XMarkIcon } from '../icons.tsx';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';

@@ -1,16 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { PlusIcon, TrashIcon, ArrowDownTrayIcon, ArrowUpOnSquareIcon } from '../icons.tsx';
 import { useAiPersonalities } from '../../hooks/useAiPersonalities.ts';
 import { formatSystemPromptToString } from '../../utils/promptUtils.ts';
-// Fix: Changed to a default import.
-// The error "Module '"../../services/aiService.ts"' has no exported member 'aiService'."
-// suggests that 'aiService' might be exported as a default from that module,
-// which is a common pattern for singleton service instances.
-import aiService from '../../services/aiService.ts';
+import { streamContent } from '../../services/index.ts';
 import { downloadJson } from '../../services/fileUtils.ts';
 import type { SystemPrompt } from '../../types.ts';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 
 const defaultNewPrompt: Omit<SystemPrompt, 'id' | 'name'> = {
     persona: 'You are a helpful assistant.',
@@ -24,6 +22,9 @@ export const AiPersonalityForge: React.FC = () => {
     const [activeId, setActiveId] = useState<string | null>(null);
     const { addNotification } = useNotification();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
 
     // Testbed State
     const [testbedInput, setTestbedInput] = useState('');
@@ -60,19 +61,26 @@ export const AiPersonalityForge: React.FC = () => {
         }
     };
     
-    const handleTestbedSend = async () => {
+    const handleTestbedSend = useCallback(async () => {
         if (!testbedInput.trim() || !activePersonality || isStreaming) return;
-        
-        const systemInstruction = formatSystemPromptToString(activePersonality);
-        const newHistory = [...chatHistory, { role: 'user' as const, content: testbedInput }];
-        setChatHistory(newHistory);
-        setTestbedInput('');
+
         setIsStreaming(true);
+        const currentInput = testbedInput;
+        setTestbedInput('');
+        setChatHistory(prev => [...prev, { role: 'user', content: currentInput }]);
 
         try {
-            const stream = await aiService.execute<AsyncGenerator<string, void, unknown>>({
-                execute: (provider) => provider.streamContent(testbedInput, systemInstruction, 0.7)
-            });
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) throw new Error('Vault setup is required to use AI features.');
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) throw new Error('Vault must be unlocked to use AI features.');
+            }
+
+            const systemInstruction = formatSystemPromptToString(activePersonality);
+            const stream = streamContent(currentInput, systemInstruction, 0.7);
 
             let fullResponse = '';
             setChatHistory(prev => [...prev, { role: 'model', content: '' }]);
@@ -80,19 +88,20 @@ export const AiPersonalityForge: React.FC = () => {
                 fullResponse += chunk;
                 setChatHistory(prev => {
                     const last = prev[prev.length - 1];
-                    if (last.role === 'model') {
+                    if (last?.role === 'model') {
                         return [...prev.slice(0, -1), { role: 'model', content: fullResponse }];
                     }
-                    return prev;
+                    return prev; // Should not happen in normal flow
                 });
             }
         } catch (e) {
-            const errorMsg = e instanceof Error ? e.message : 'An error occurred';
+            const errorMsg = e instanceof Error ? e.message : 'An unknown error occurred';
+            addNotification(errorMsg, 'error');
             setChatHistory(prev => [...prev, { role: 'model', content: `**Error:** ${errorMsg}` }]);
         } finally {
             setIsStreaming(false);
         }
-    };
+    }, [testbedInput, activePersonality, isStreaming, vaultState, requestCreation, requestUnlock, addNotification]);
     
     const handleExport = () => {
         if (!activePersonality) return;
@@ -179,7 +188,7 @@ export const AiPersonalityForge: React.FC = () => {
                            {isStreaming && <div className="flex justify-center"><LoadingSpinner/></div>}
                         </div>
                         <div className="flex gap-2 mt-4">
-                            <input value={testbedInput} onChange={e => setTestbedInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleTestbedSend()} className="flex-grow p-2 bg-surface border rounded" placeholder="Test your AI..."/>
+                            <input value={testbedInput} onChange={e => setTestbedInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleTestbedSend())} className="flex-grow p-2 bg-surface border rounded" placeholder="Test your AI..."/>
                             <button onClick={handleTestbedSend} disabled={isStreaming} className="btn-primary px-4">Send</button>
                         </div>
                     </div>

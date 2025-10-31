@@ -1,6 +1,6 @@
 /**
  * @file Renders the main desktop environment, including the feature dock, windows, and taskbar.
- * It manages the state of all open, closed, and minimized windows and triggers the vault unlock prompt on startup.
+ * It manages the state of all open, closed, and minimized windows. The vault unlock prompt is handled by the VaultProvider.
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -11,9 +11,6 @@ import { Window, type WindowState as WindowComponentState } from './Window.tsx';
 import { Taskbar } from './Taskbar.tsx';
 import { ALL_FEATURES } from '../features/index.tsx';
 import type { Feature } from '../../types.ts';
-import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
-import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
-import { isVaultInitialized } from '../../services/vaultService.ts';
 
 /**
  * @interface WindowState
@@ -47,7 +44,6 @@ const Z_INDEX_BASE = 10;
 
 /**
  * The main desktop view component that acts as a window manager.
- * On mount, it checks if the credential vault is initialized and prompts the user to unlock it if necessary.
  * @param {DesktopViewProps} props - The props for the component.
  * @returns {React.ReactElement} The rendered desktop view.
  * @example
@@ -57,31 +53,6 @@ export const DesktopView: React.FC<DesktopViewProps> = ({ openFeatureId }) => {
     const [windows, setWindows] = useState<Record<string, WindowState>>({});
     const [activeId, setActiveId] = useState<string | null>(null);
     const [nextZIndex, setNextZIndex] = useState(Z_INDEX_BASE);
-    const { state, dispatch } = useGlobalState();
-    const { requestUnlock } = useVaultModal();
-
-    // Check vault initialization status on component mount.
-    useEffect(() => {
-        const checkInitialization = async () => {
-            try {
-                const initialized = await isVaultInitialized();
-                dispatch({ type: 'SET_VAULT_STATE', payload: { isInitialized: initialized } });
-            } catch (error) {
-                console.error("Failed to check vault initialization status:", error);
-            }
-        };
-        checkInitialization();
-    }, [dispatch]);
-
-    // Prompt to unlock the vault if it's initialized but locked.
-    useEffect(() => {
-        const promptToUnlock = async () => {
-            if (state.vaultState.isInitialized && !state.vaultState.isUnlocked) {
-                await requestUnlock();
-            }
-        };
-        promptToUnlock();
-    }, [state.vaultState.isInitialized, state.vaultState.isUnlocked, requestUnlock]);
     
     const openWindow = useCallback((featureId: string) => {
         const newZIndex = nextZIndex + 1;

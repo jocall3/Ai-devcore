@@ -4,6 +4,9 @@ import { useLocalStorage } from '../../hooks/useLocalStorage.ts';
 import { streamContent } from '../../services/index.ts';
 import { LoadingSpinner } from '../shared/index.tsx';
 import { MarkdownRenderer } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 interface Note {
     id: number;
@@ -22,11 +25,17 @@ export const DigitalWhiteboard: React.FC = () => {
     const [isSummarizing, setIsSummarizing] = useState(false);
     const [summary, setSummary] = useState('');
 
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
+
     const handleSummarize = useCallback(async () => {
         if (notes.length === 0) return;
         setIsSummarizing(true);
         setSummary('');
-        try {
+
+        const runSummarize = async () => {
             const allNotesText = notes.map((n: Note) => `- ${n.text}`).join('\n');
             const prompt = `Summarize these notes into a concise overview:\n\n${allNotesText}`;
             const systemInstruction = "You are a helpful assistant that summarizes notes.";
@@ -36,13 +45,34 @@ export const DigitalWhiteboard: React.FC = () => {
                 fullResponse += chunk;
                 setSummary(fullResponse);
             }
+        };
+
+        try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required for AI features.', 'error');
+                    setIsSummarizing(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked for AI features.', 'info');
+                    setIsSummarizing(false);
+                    return;
+                }
+            }
+            await runSummarize();
         } catch (error) {
-            console.error(error);
-            setSummary('Sorry, an error occurred while summarizing.');
+            const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+            setSummary(`Sorry, an error occurred while summarizing: ${errorMessage}`);
+            addNotification(`Summarization failed: ${errorMessage}`, 'error');
         } finally {
             setIsSummarizing(false);
         }
-    }, [notes]);
+    }, [notes, vaultState, requestCreation, requestUnlock, addNotification]);
 
     const addNote = () => {
         const newNote: Note = {

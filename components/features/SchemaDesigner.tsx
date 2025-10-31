@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { MapIcon, ArrowDownTrayIcon } from '../icons.tsx';
-import { downloadFile } from '../../services/fileUtils.ts';
+import { downloadFile } from '../../services/index.ts';
 
 interface Column { id: number; name: string; type: string; }
 interface Table { id: number; name: string; columns: Column[]; x: number; y: number; }

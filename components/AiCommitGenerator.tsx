@@ -6,7 +6,6 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-// FIX: Replaced non-existent 'generateCommitMessageStream' with the generic 'streamContent' function.
 import { streamContent } from '../services/index.ts';
 import { useGlobalState } from '../contexts/GlobalStateContext.tsx';
 import { useVaultModal } from '../contexts/VaultModalContext.tsx';
@@ -102,7 +101,6 @@ export const AiCommitGenerator: React.FC<AiCommitGeneratorProps> = ({ diff: init
                 }
             }
 
-            // FIX: Use the existing streamContent function with a specific prompt
             const prompt = `Generate a conventional commit message for the following diff:\n\n\`\`\`diff\n${diffToAnalyze}\n\`\`\``;
             const systemInstruction = 'You are a commit message generator. Respond with only the commit message in the conventional commit format. Do not include any extra text, markdown formatting, or explanations.';
             const stream = streamContent(prompt, systemInstruction);

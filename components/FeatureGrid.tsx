@@ -1,7 +1,6 @@
-
-
 import React, { useState, useMemo } from 'react';
 import type { Feature } from '../types.ts';
+import { ALL_FEATURES } from './features/index.tsx';
 
 interface FeatureCardProps {
   feature: Feature;
@@ -27,19 +26,18 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ feature, onClick }) => {
 };
 
 
-export const FeatureGrid: React.FC<{ features: Feature[], onFeatureSelect?: (id: string) => void }> = ({ features, onFeatureSelect }) => {
+export const FeatureGrid: React.FC<{ onFeatureSelect?: (id: string) => void }> = ({ onFeatureSelect }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredFeatures = useMemo(() => {
-    const featureList = features || [];
-    if (!searchTerm) return featureList;
-    return featureList.filter(
+    if (!searchTerm) return ALL_FEATURES;
+    return ALL_FEATURES.filter(
       (feature) =>
         feature.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         feature.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
         feature.category.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [searchTerm, features]);
+  }, [searchTerm]);
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 h-full">

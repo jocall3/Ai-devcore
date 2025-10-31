@@ -5,6 +5,7 @@ import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 import { fileToBase64, blobToDataURL, downloadFile } from '../../services/fileUtils.ts';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
 import { useNotification } from '../../contexts/NotificationContext.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
 
 export const ScreenshotToComponent: React.FC = () => {
     const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -12,59 +13,71 @@ export const ScreenshotToComponent: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const { requestUnlock } = useVaultModal();
+
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
     const { addNotification } = useNotification();
 
-    const handleGenerate = async (base64Image: string, mimeType: string) => {
-        setIsLoading(true);
-        setError('');
-        setRawCode('');
-        
-        const performGeneration = async () => {
-            const prompt = {
-                parts: [
-                    { text: 'Generate a single file for a React component that looks like this image, using Tailwind CSS for styling. Respond only with the TSX code, without any markdown fences or explanations.' },
-                    { inlineData: { mimeType: mimeType, data: base64Image } }
-                ]
-            };
-            const systemInstruction = 'You are an expert at creating React components from images. You only output valid TSX code.';
-            const stream = streamContent(prompt, systemInstruction, 0.3);
-            let fullResponse = '';
-            for await (const chunk of stream) {
-                fullResponse += chunk;
-                setRawCode(fullResponse.replace(/^```(?:\w+\n)?/, '').replace(/```$/, ''));
+    const withVault = useCallback(async (callback: () => Promise<void>) => {
+        if (!vaultState.isInitialized) {
+            const created = await requestCreation();
+            if (!created) {
+                addNotification('Vault setup is required to use AI features.', 'error');
+                return;
             }
-        };
-
-        try {
-            await performGeneration();
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
-            if (errorMessage.includes("Vault is locked")) {
-                addNotification("Vault is locked. Please unlock to proceed.", "info");
-                const unlocked = await requestUnlock();
-                if (unlocked) {
-                    await performGeneration();
-                } else {
-                    setError("Vault must be unlocked to generate components.");
-                }
-            } else {
-                setError(errorMessage);
-            }
-        } finally {
-            setIsLoading(false);
         }
-    };
+        if (!vaultState.isUnlocked) {
+            const unlocked = await requestUnlock();
+            if (!unlocked) {
+                addNotification('Vault must be unlocked to use AI features.', 'info');
+                return;
+            }
+        }
+        await callback();
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
-    const processImageBlob = async (blob: Blob) => {
+    const handleGenerate = useCallback(async (base64Image: string, mimeType: string) => {
+        await withVault(async () => {
+            setIsLoading(true);
+            setError('');
+            setRawCode('');
+            
+            try {
+                const prompt = {
+                    parts: [
+                        { text: 'Generate a single file for a React component that looks like this image, using Tailwind CSS for styling. Respond only with the TSX code, without any markdown fences or explanations.' },
+                        { inlineData: { mimeType: mimeType, data: base64Image } }
+                    ]
+                };
+                const systemInstruction = 'You are an expert at creating React components from images. You only output valid TSX code.';
+                const stream = streamContent(prompt, systemInstruction, 0.3);
+                let fullResponse = '';
+                for await (const chunk of stream) {
+                    fullResponse += chunk;
+                    setRawCode(fullResponse.replace(/^```(?:\w+\n)?/, '').replace(/```$/, ''));
+                }
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+                setError(errorMessage);
+                addNotification(errorMessage, 'error');
+            } finally {
+                setIsLoading(false);
+            }
+        });
+    }, [withVault, addNotification]);
+
+    const processImageBlob = useCallback(async (blob: Blob) => {
         try {
             const [dataUrl, base64Image] = await Promise.all([blobToDataURL(blob), fileToBase64(blob as File)]);
             setPreviewImage(dataUrl);
             await handleGenerate(base64Image, blob.type);
         } catch (e) {
-            setError('Could not process the image.');
+            const errorMessage = e instanceof Error ? e.message : 'Could not process the image.';
+            setError(errorMessage);
+            addNotification(errorMessage, 'error');
         }
-    };
+    }, [handleGenerate, addNotification]);
     
     const handlePaste = useCallback(async (event: React.ClipboardEvent) => {
         const items = event.clipboardData.items;
@@ -75,7 +88,7 @@ export const ScreenshotToComponent: React.FC = () => {
                 return;
             }
         }
-    }, []);
+    }, [processImageBlob]);
 
     const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];

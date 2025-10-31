@@ -4,18 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// FIX: AIEngineService interface is defined locally to resolve a broken import path
-// and compilation errors, as the external module 'ai-engine.service' currently does
-// not export 'AIEngineService'. This is a temporary measure to allow this file to compile.
-// In a fully refactored system, this interface would be properly imported from '../ai-engine.service'.
-interface AIEngineService {
-  /**
-   * Generates unit tests for a given code snippet, returning them as an asynchronous stream.
-   * @param code The source code snippet for which to generate tests.
-   * @returns An asynchronous generator yielding chunks of generated unit test code.
-   */
-  generateUnitTestsStream(code: string): Promise<AsyncGenerator<string>>;
-}
+import type { AIEngine } from '../ai-engine.service';
 
 // FIX: ICommand is defined locally to resolve a broken import path.
 // In a fully refactored system, this would be a central, shared interface.
@@ -42,7 +31,7 @@ export interface ICommand<T> {
  * @example
  * ```typescript
  * // In a service or component where dependency injection is available:
- * const aiEngineService = container.get<AIEngineService>(TYPES.AIEngineService);
+ * const aiEngineService = container.get<AIEngine>(TYPES.AIEngineService);
  * const codeToTest = `export const add = (a, b) => a + b;`;
  *
  * const command = new GenerateUnitTestCommand(codeToTest);
@@ -75,15 +64,15 @@ export class GenerateUnitTestCommand implements ICommand<Promise<AsyncGenerator<
   }
 
   /**
-   * Executes the unit test generation command by calling the appropriate method on the AIEngineService.
+   * Executes the unit test generation command by calling the appropriate method on the AIEngine.
    * This method encapsulates the core logic of the command.
    *
    * @param {object} context - The execution context.
-   * @param {AIEngineService} context.aiEngineService - The AI engine service responsible for executing AI-related tasks.
+   * @param {AIEngine} context.aiEngineService - The AI engine service responsible for executing AI-related tasks.
    * @returns {Promise<AsyncGenerator<string>>} A promise that resolves to an asynchronous generator,
    * which yields the generated unit test code in streaming chunks.
    */
-  public async execute(context: { aiEngineService: AIEngineService }): Promise<AsyncGenerator<string>> {
+  public async execute(context: { aiEngineService: AIEngine }): Promise<AsyncGenerator<string>> {
     if (!context || !context.aiEngineService) {
       throw new Error('Execution context must contain an "aiEngineService".');
     }

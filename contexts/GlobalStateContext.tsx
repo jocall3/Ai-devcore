@@ -4,9 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useReducer, useContext, useEffect } from 'react';
+import React, { createContext, useReducer, useContext, useEffect, useMemo } from 'react';
 import type { ViewType, AppUser, GitHubUser, FileNode } from '../types.ts';
-import { isVaultInitialized, lockVault } from '../services/vaultService.ts';
+import { container } from '../core/di/container.ts';
+import { SecurityCoreService } from '../modules/security-core/security-core.service.ts';
+import { TYPES } from '../core/di/types.ts';
+import { VaultStatus } from '../modules/security-core/types.ts';
+import { eventBus, type AppEventMap } from '../core/bus/event-bus.service.ts';
 
 /**
  * Defines the shape of the global application state.
@@ -176,17 +180,42 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
         }
     });
 
-    // Effect to check vault initialization status on app startup.
-    useEffect(() => {
-        const checkVaultStatus = async () => {
-            const initialized = await isVaultInitialized();
-            dispatch({ type: 'SET_VAULT_STATE', payload: { isInitialized: initialized } });
-        };
-        checkVaultStatus();
+    const securityCoreService = useMemo(() => {
+        try {
+            return container.resolve<SecurityCoreService>(TYPES.SecurityCore);
+        } catch (e) {
+            console.error("Failed to resolve SecurityCoreService:", e);
+            return null;
+        }
     }, []);
+
+    // Effect to get initial vault status and subscribe to updates.
+    useEffect(() => {
+        if (!securityCoreService) return;
+
+        const initialStatus = securityCoreService.getStatus();
+        dispatch({
+            type: 'SET_VAULT_STATE',
+            payload: {
+                isInitialized: initialStatus !== VaultStatus.UNINITIALIZED,
+                isUnlocked: initialStatus === VaultStatus.UNLOCKED,
+            }
+        });
+
+        const handleVaultStateChange = (payload: AppEventMap['vault:stateChanged']) => {
+            dispatch({ type: 'SET_VAULT_STATE', payload });
+        };
+        
+        // The SecurityCoreService publishes 'vault:state-changed', but the central AppEventMap
+        // has 'vault:stateChanged'. We subscribe to the canonical event name.
+        const unsubscribe = eventBus.subscribe('vault:stateChanged', handleVaultStateChange as any);
+        
+        return () => unsubscribe();
+    }, [securityCoreService]);
 
     // Effect to manage vault session timeout for automatic locking.
     useEffect(() => {
+        if (!securityCoreService) return;
         let timeoutId: number | undefined;
 
         const resetTimeout = () => {
@@ -194,8 +223,7 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
             if (state.vaultState.isUnlocked) {
                 timeoutId = window.setTimeout(() => {
                     console.log('Vault session timed out due to inactivity. Locking vault.');
-                    lockVault();
-                    dispatch({ type: 'SET_VAULT_STATE', payload: { isUnlocked: false } });
+                    securityCoreService.lockVault();
                 }, VAULT_TIMEOUT_MS);
             }
         };
@@ -211,15 +239,14 @@ export const GlobalStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
             if (timeoutId) clearTimeout(timeoutId);
             activityEvents.forEach(event => window.removeEventListener(event, resetTimeout));
         };
-    }, [state.vaultState.isUnlocked]);
+    }, [state.vaultState.isUnlocked, securityCoreService]);
 
     // Effect to automatically lock the vault on user logout.
     useEffect(() => {
-        if (state.user === null && state.vaultState.isUnlocked) {
-            lockVault();
-            dispatch({ type: 'SET_VAULT_STATE', payload: { isUnlocked: false } });
+        if (state.user === null && state.vaultState.isUnlocked && securityCoreService) {
+            securityCoreService.lockVault();
         }
-    }, [state.user, state.vaultState.isUnlocked]);
+    }, [state.user, state.vaultState.isUnlocked, securityCoreService]);
 
     // Effect to persist parts of the state to localStorage.
     useEffect(() => {

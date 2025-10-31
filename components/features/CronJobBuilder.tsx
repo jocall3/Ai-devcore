@@ -1,8 +1,11 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { CommandLineIcon, SparklesIcon } from '../icons.tsx';
-import { generateCronFromDescription } from '../../services/aiService.ts';
+import { generateCronFromDescription } from '../../services/index.ts';
 import type { CronParts } from '../../types.ts';
 import { LoadingSpinner } from '../shared/index.tsx';
+import { useGlobalState } from '../../contexts/GlobalStateContext.tsx';
+import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 const CronPartSelector: React.FC<{ label: string, value: string, onChange: (value: string) => void, options: (string|number)[] }> = ({ label, value, onChange, options }) => {
     return (
@@ -25,6 +28,11 @@ export const CronJobBuilder: React.FC<{ initialPrompt?: string }> = ({ initialPr
     const [aiPrompt, setAiPrompt] = useState(initialPrompt || 'every weekday at 5pm');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+
+    const { state } = useGlobalState();
+    const { vaultState } = state;
+    const { requestUnlock, requestCreation } = useVaultModal();
+    const { addNotification } = useNotification();
     
     const cronExpression = useMemo(() => {
         return `${minute} ${hour} ${dayOfMonth} ${month} ${dayOfWeek}`;
@@ -35,6 +43,23 @@ export const CronJobBuilder: React.FC<{ initialPrompt?: string }> = ({ initialPr
         setIsLoading(true);
         setError('');
         try {
+            if (!vaultState.isInitialized) {
+                const created = await requestCreation();
+                if (!created) {
+                    addNotification('Vault setup is required to use AI features.', 'error');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+            if (!vaultState.isUnlocked) {
+                const unlocked = await requestUnlock();
+                if (!unlocked) {
+                    addNotification('Vault must be unlocked to use AI features.', 'info');
+                    setIsLoading(false);
+                    return;
+                }
+            }
+
             const result: CronParts = await generateCronFromDescription(p);
             setMinute(result.minute);
             setHour(result.hour);
@@ -43,11 +68,13 @@ export const CronJobBuilder: React.FC<{ initialPrompt?: string }> = ({ initialPr
             setDayOfWeek(result.dayOfWeek);
         } catch (e) {
             console.error(e);
-            setError(e instanceof Error ? e.message : 'An unknown error occurred.');
+            const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
+            setError(errorMessage);
+            addNotification(errorMessage, 'error');
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [vaultState, requestCreation, requestUnlock, addNotification]);
 
     useEffect(() => {
         if (initialPrompt) {

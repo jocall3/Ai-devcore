@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { streamContent, blobToBase64 } from '../../services/index.ts';
+import { transcribeAudioToCodeStream, blobToBase64 } from '../../services/index.ts';
 import { MicrophoneIcon } from '../icons.tsx';
 import { LoadingSpinner, MarkdownRenderer } from '../shared/index.tsx';
 import { useVaultModal } from '../../contexts/VaultModalContext.tsx';
@@ -77,14 +77,7 @@ export const AudioToCode: React.FC = () => {
         try {
             const base64Audio = await blobToBase64(audioBlob);
             
-            const prompt = {
-                parts: [
-                    { text: "Generate a code snippet based on the following audio description. The code should be complete and runnable if possible. Output only the code in a markdown block." },
-                    { inlineData: { mimeType: 'audio/webm', data: base64Audio } }
-                ]
-            };
-            const systemInstruction = "You are an expert programmer that writes code based on voice instructions. You only output code, no explanations.";
-            const stream = streamContent(prompt, systemInstruction, 0.5);
+            const stream = transcribeAudioToCodeStream(base64Audio, 'audio/webm');
 
             let fullResponse = '';
             for await (const chunk of stream) {
